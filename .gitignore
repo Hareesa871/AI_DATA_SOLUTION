@@ -1,0 +1,40 @@
+# Secrets and credentials
+.streamlit/secrets.toml
+.env
+.env.*
+api_key.txt
+token.json
+credentials.json
+
+# Database backups and local data
+*.dump
+*.backup
+*.sql
+datainfo.csv
+
+# Python environment and cache
+venv/
+.venv/
+__pycache__/
+*.py[cod]
+
+# Logs and temporary files
+logs/
+*.log
+
+# Deployment secrets and credentials
+.streamlit/secrets.toml
+.env
+.env.*
+api_key.txt
+token.json
+credentials.json
+
+# Database backups and local data
+*.dump
+*.backup
+*.sql
+
+# Logs and temporary files
+logs/
+*.log

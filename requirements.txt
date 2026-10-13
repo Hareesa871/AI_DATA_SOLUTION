@@ -1,0 +1,6 @@
+﻿streamlit
+pandas
+duckdb
+psycopg[binary]
+openai
+reportlab
