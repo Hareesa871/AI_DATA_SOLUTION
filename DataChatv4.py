@@ -760,8 +760,67 @@ def generate_pdf(question, dataset_name, result, summary="", generated_sql="", v
     ]
     if not output_df.empty:
         chart_added = False
-        # Prefer the exact Plotly figure currently shown in the app, so the PDF
-        # Chart overview always matches the selected visualization type/options.
+        # Embed the exact Plotly chart currently displayed in the app. This means
+        # changing Bar to Pie (or changing dimensions/measures) also changes the PDF.
+        if chart_figure is not None:
+            try:
+                chart_bytes = chart_figure.to_image(format="png", width=1200, height=700, scale=1)
+                chart_buffer = io.BytesIO(chart_bytes)
+                story.extend([
+                    Paragraph("Chart overview", styles["Heading2"]),
+                    RLImage(chart_buffer, width=600, height=340),
+                    Spacer(1, 8),
+                ])
+                chart_added = True
+            except Exception:
+                # Fallback when Plotly's image renderer (Kaleido) is unavailable.
+                # Rebuild common chart types from the active figure's traces/data.
+                try:
+                    import matplotlib
+                    matplotlib.use("Agg")
+                    import matplotlib.pyplot as plt
+                    fig_data = chart_figure.to_dict().get("data", [])
+                    if fig_data:
+                        trace = fig_data[0]
+                        fig, ax = plt.subplots(figsize=(9, 4.5))
+                        trace_type = trace.get("type", "scatter")
+                        if trace_type == "pie":
+                            labels = trace.get("labels", [])
+                            values = trace.get("values", [])
+                            if labels and values:
+                                ax.pie(values, labels=labels, autopct="%1.0f%%", startangle=90)
+                                ax.axis("equal")
+                        elif trace_type == "bar":
+                            x_values = trace.get("x", [])
+                            y_values = trace.get("y", [])
+                            if x_values and y_values:
+                                ax.bar([str(v) for v in x_values], y_values)
+                                ax.tick_params(axis="x", labelrotation=35, labelsize=7)
+                        elif trace_type == "histogram":
+                            x_values = trace.get("x", [])
+                            if x_values:
+                                ax.hist(x_values, bins=20)
+                        else:
+                            x_values = trace.get("x", [])
+                            y_values = trace.get("y", [])
+                            if x_values and y_values:
+                                ax.plot(x_values, y_values, marker="o" if trace.get("mode", "").find("markers") >= 0 else None)
+                                ax.tick_params(axis="x", labelrotation=35, labelsize=7)
+                        fig_title = chart_figure.layout.title.text if chart_figure.layout.title else "Current visualization"
+                        ax.set_title(str(fig_title or "Current visualization"))
+                        fig.tight_layout()
+                        image_buffer = io.BytesIO()
+                        fig.savefig(image_buffer, format="png", dpi=140, bbox_inches="tight")
+                        plt.close(fig)
+                        image_buffer.seek(0)
+                        story.extend([
+                            Paragraph("Chart overview", styles["Heading2"]),
+                            RLImage(image_buffer, width=600, height=300),
+                            Spacer(1, 8),
+                        ])
+                        chart_added = True
+                except Exception:
+                    pass
         story.append(Paragraph("Result table", styles["Heading2"]))
         # Include every row in the PDF, not just a preview subset.
         pdf_df = output_df.fillna("").astype(str)
