@@ -759,62 +759,9 @@ def generate_pdf(question, dataset_name, result, summary="", generated_sql="", v
         Spacer(1, 10),
     ]
     if not output_df.empty:
-        try:
-            import matplotlib
-            matplotlib.use("Agg")
-            import matplotlib.pyplot as plt
-            numeric = []
-            plot_df = result_to_df(visualization_data).copy() if visualization_data is not None else output_df.copy()
-            for col in plot_df.columns:
-                vals = pd.to_numeric(plot_df[col], errors="coerce")
-                if vals.notna().sum() >= 2:
-                    plot_df[col] = vals
-                    numeric.append(col)
-            if numeric and len(plot_df) >= 2:
-                category = next((c for c in plot_df.columns if c not in numeric), None)
-                metric = numeric[0]
-                fig, ax = plt.subplots(figsize=(9, 3.2))
-                if category:
-                    chart_data = plot_df[[category, metric]].dropna().head(20)
-                    ax.bar(chart_data[category].astype(str), chart_data[metric])
-                    ax.set_xlabel(str(category))
-                    ax.tick_params(axis="x", labelrotation=35, labelsize=7)
-                else:
-                    ax.plot(range(len(plot_df.head(30))), plot_df[metric].head(30), marker="o")
-                    ax.set_xlabel("Row")
-                ax.set_ylabel(str(metric))
-                ax.set_title(f"{metric} overview")
-                fig.tight_layout()
-                image_buffer = io.BytesIO()
-                fig.savefig(image_buffer, format="png", dpi=120, bbox_inches="tight")
-                plt.close(fig)
-                image_buffer.seek(0)
-                story.extend([Paragraph("Chart overview", styles["Heading2"]), RLImage(image_buffer, width=480, height=175), Spacer(1, 8)])
-        except Exception:
-            pass
-        if visualization_data is not None:
-            visualization_df = result_to_df(visualization_data)
-            story.append(Paragraph("Visualization Data", styles["Heading2"]))
-            vis_pdf_df = visualization_df.fillna("").astype(str)
-            vis_data = [[str(c)[:40] for c in vis_pdf_df.columns]]
-            vis_data.extend([[str(v)[:100] for v in row] for row in vis_pdf_df.itertuples(index=False, name=None)])
-            vis_table = LongTable(vis_data, repeatRows=1, splitByRow=1)
-            vis_table.setStyle(TableStyle([
-                ("BACKGROUND", (0, 0), (-1, 0), colors.HexColor("#243b80")),
-                ("TEXTCOLOR", (0, 0), (-1, 0), colors.white),
-                ("GRID", (0, 0), (-1, -1), 0.4, colors.grey),
-                ("ALIGN", (0, 0), (-1, -1), "LEFT"),
-                ("FONTSIZE", (0, 0), (-1, -1), 7),
-                ("VALIGN", (0, 0), (-1, -1), "TOP"),
-            ]))
-            story.extend([vis_table, Spacer(1, 8)])
-        if chart_figure is not None:
-            try:
-                chart_bytes = chart_figure.to_image(format="png", width=1100, height=650, scale=1)
-                chart_buffer = io.BytesIO(chart_bytes)
-                story.extend([Paragraph("Current Visualization", styles["Heading2"]), RLImage(chart_buffer, width=500, height=290), Spacer(1, 8)])
-            except Exception:
-                pass
+        chart_added = False
+        # Prefer the exact Plotly figure currently shown in the app, so the PDF
+        # Chart overview always matches the selected visualization type/options.
         story.append(Paragraph("Result table", styles["Heading2"]))
         # Include every row in the PDF, not just a preview subset.
         pdf_df = output_df.fillna("").astype(str)
