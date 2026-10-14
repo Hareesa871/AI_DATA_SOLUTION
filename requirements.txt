@@ -3,6 +3,8 @@ pandas
 numpy
 openai
 psycopg2-binary
+psycopg[binary]
+duckdb
 sqlalchemy
 python-dotenv
 openpyxl
@@ -14,3 +16,4 @@ seaborn
 reportlab
 Pillow
 requests
+xlrd

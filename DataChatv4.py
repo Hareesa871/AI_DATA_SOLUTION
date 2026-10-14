@@ -85,9 +85,44 @@ st.markdown(
     div[data-testid="stTabs"] button[role="tab"][aria-selected="true"] {
       background: linear-gradient(90deg,#087fbd,#1457cb); color: #fff; border-color: #159fe4;
     }
-    div.stButton > button, div.stFormSubmitButton > button, div.stDownloadButton > button {
-      border-radius: 999px; min-height: 2.7rem; border: 1px solid #21415f;
-      background: #0c1a32; color: #f5f8ff;
+    div.stButton > button, div.stFormSubmitButton > button, div.stDownloadButton > button,
+    div[data-testid="stDownloadButton"] > button {
+      border-radius: 999px !important; min-height: 2.7rem !important;
+      border: 1px solid #21415f !important;
+      background: #0c1a32 !important; color: #f5f8ff !important;
+      box-shadow: none !important; font-weight: 500 !important;
+    }
+    /* Force the Help PDF download control to use the exact same visual style as
+       the Sales summary, Branch analysis, and Data quality starter buttons. */
+    div[data-testid="stDownloadButton"] button,
+    div.stDownloadButton button,
+    div[data-testid="stDownloadButton"] button[kind="secondary"],
+    div.stDownloadButton button[kind="secondary"] {
+      display: flex !important;
+      align-items: center !important;
+      justify-content: center !important;
+      width: 100% !important;
+      min-height: 2.7rem !important;
+      padding: 0.25rem 0.75rem !important;
+      border-radius: 999px !important;
+      border: 1px solid #21415f !important;
+      background: #0c1a32 !important;
+      color: #f5f8ff !important;
+      box-shadow: none !important;
+      font-weight: 500 !important;
+      text-decoration: none !important;
+    }
+    div[data-testid="stDownloadButton"] button:hover,
+    div.stDownloadButton button:hover {
+      background: #122746 !important;
+      border-color: #3b82b8 !important;
+      color: #ffffff !important;
+    }
+    div[data-testid="stDownloadButton"] button p,
+    div.stDownloadButton button p {
+      color: inherit !important;
+      font-weight: 500 !important;
+      margin: 0 !important;
     }
     div.stButton > button[kind="primary"], div.stFormSubmitButton > button[kind="primary"] {
       background: linear-gradient(90deg,#087fbd,#087fbd); border-color: #139fe2; color: white;
@@ -99,55 +134,6 @@ st.markdown(
     [data-testid="stExpander"] { border: 1px solid #1c2b45; border-radius: 14px; background: #0a1225; }
     hr { border-color: #1b2b45; }
     [data-testid="stCaptionContainer"] { color: #93a4be; }
-    /* ChatGPT-style question-mode tabs: hide radio circles and underline the active option. */
-    div[data-testid="stRadio"] div[role="radiogroup"][aria-orientation="horizontal"] {
-      display: flex !important;
-      align-items: stretch !important;
-      gap: 1.15rem !important;
-      border-bottom: 1px solid #263449 !important;
-      width: 100% !important;
-    }
-    div[data-testid="stRadio"] div[role="radiogroup"][aria-orientation="horizontal"] label {
-      display: inline-flex !important;
-      align-items: center !important;
-      gap: .45rem !important;
-      padding: .65rem .15rem .75rem !important;
-      margin: 0 !important;
-      border: 0 !important;
-      border-bottom: 3px solid transparent !important;
-      border-radius: 0 !important;
-      background: transparent !important;
-      color: #aebbd0 !important;
-      white-space: nowrap !important;
-      font-size: 1rem !important;
-    }
-    /* Remove the actual Streamlit radio indicators (circles), not the tab labels. */
-    div[data-testid="stRadio"] div[role="radiogroup"][aria-orientation="horizontal"] label > div:first-child,
-    div[data-testid="stRadio"] div[role="radiogroup"][aria-orientation="horizontal"] label > div:first-child *,
-    div[data-testid="stRadio"] div[role="radiogroup"][aria-orientation="horizontal"] label input[type="radio"],
-    div[data-testid="stRadio"] div[role="radiogroup"][aria-orientation="horizontal"] [data-baseweb="radio"],
-    div[data-testid="stRadio"] div[role="radiogroup"][aria-orientation="horizontal"] [data-baseweb="radio"] * {
-      display: none !important;
-      visibility: hidden !important;
-      width: 0 !important;
-      min-width: 0 !important;
-      margin: 0 !important;
-      padding: 0 !important;
-      border: 0 !important;
-      box-shadow: none !important;
-    }
-    div[data-testid="stRadio"] div[role="radiogroup"][aria-orientation="horizontal"] label {
-      gap: 0 !important;
-    }
-    div[data-testid="stRadio"] div[role="radiogroup"][aria-orientation="horizontal"] label:has(input:checked) {
-      color: #ff5364 !important;
-      border-bottom-color: #ff5364 !important;
-      font-weight: 600 !important;
-    }
-    div[data-testid="stRadio"] div[role="radiogroup"][aria-orientation="horizontal"] label:hover {
-      color: #ff5364 !important;
-      background: transparent !important;
-    }
     /* Compact ChatGPT-like send-arrow control in the question form */
     .nexa-send-row div[data-testid="stFormSubmitButton"] button {
       min-height: 2.7rem; width: 2.7rem; min-width: 2.7rem; padding: 0;
@@ -180,10 +166,6 @@ if theme_mode == "Light":
         [data-testid="stMarkdownContainer"] li, [data-testid="stCaptionContainer"] { color:#334155 !important; }
         div[data-testid="stTabs"] button[role="tab"] { background:#fff !important; color:#334155 !important; border-color:#d9e2ef !important; }
         div[data-testid="stTabs"] button[role="tab"][aria-selected="true"] { background:#dbeafe !important; color:#0f3b72 !important; border-color:#60a5fa !important; }
-        div[data-testid="stRadio"] div[role="radiogroup"][aria-orientation="horizontal"] { border-bottom-color:#d9e2ef !important; }
-        div[data-testid="stRadio"] div[role="radiogroup"][aria-orientation="horizontal"] label { color:#52627a !important; }
-        div[data-testid="stRadio"] div[role="radiogroup"][aria-orientation="horizontal"] label:has(input:checked) { color:#e33f54 !important; border-bottom-color:#e33f54 !important; }
-        div[data-testid="stRadio"] div[role="radiogroup"][aria-orientation="horizontal"] label:hover { color:#e33f54 !important; }
         input, textarea, [data-baseweb="select"] > div, [data-baseweb="input"] > div,
         [data-testid="stNumberInput"] input, [data-testid="stDateInput"] input {
           background:#fff !important; color:#182338 !important; border-color:#cbd5e1 !important;
@@ -191,8 +173,30 @@ if theme_mode == "Light":
         input::placeholder, textarea::placeholder { color:#64748b !important; opacity:1 !important; }
         [data-baseweb="select"] *, [role="listbox"], [role="option"], [data-baseweb="popover"] * { color:#182338 !important; }
         [role="listbox"], [role="option"], [data-baseweb="popover"] { background:#fff !important; }
-        div.stButton > button, div.stFormSubmitButton > button, div.stDownloadButton > button {
+        div.stButton > button, div.stFormSubmitButton > button, div.stDownloadButton > button,
+        div[data-testid="stDownloadButton"] > button {
           background:#fff !important; color:#182338 !important; border-color:#cbd5e1 !important;
+          border-radius:999px !important; min-height:2.7rem !important; box-shadow:none !important;
+        }
+        /* Light-theme Help download button must match the other starter buttons. */
+        div[data-testid="stDownloadButton"] button,
+        div.stDownloadButton button,
+        div[data-testid="stDownloadButton"] button[kind="secondary"],
+        div.stDownloadButton button[kind="secondary"] {
+          background:#fff !important;
+          color:#182338 !important;
+          border-color:#cbd5e1 !important;
+          border-radius:999px !important;
+          min-height:2.7rem !important;
+          width:100% !important;
+          box-shadow:none !important;
+          font-weight:500 !important;
+        }
+        div[data-testid="stDownloadButton"] button:hover,
+        div.stDownloadButton button:hover {
+          background:#f1f5f9 !important;
+          color:#182338 !important;
+          border-color:#94a3b8 !important;
         }
         div.stButton > button[kind="primary"], div.stFormSubmitButton > button[kind="primary"] {
           background:#087fbd !important; color:#fff !important; border-color:#087fbd !important;
@@ -203,31 +207,6 @@ if theme_mode == "Light":
         hr { border-color:#d9e2ef !important; }
         </style>""", unsafe_allow_html=True
     )
-# Ensure the question-mode selector has no visible radio circles in either theme.
-st.markdown(
-    """
-    <style>
-    div[data-testid="stRadio"] div[role="radiogroup"][aria-orientation="horizontal"] [data-baseweb="radio"],
-    div[data-testid="stRadio"] div[role="radiogroup"][aria-orientation="horizontal"] [data-baseweb="radio"] *,
-    div[data-testid="stRadio"] div[role="radiogroup"][aria-orientation="horizontal"] label input[type="radio"],
-    div[data-testid="stRadio"] div[role="radiogroup"][aria-orientation="horizontal"] label > div:first-child {
-        display: none !important;
-        visibility: hidden !important;
-        width: 0 !important;
-        min-width: 0 !important;
-        margin: 0 !important;
-        padding: 0 !important;
-        border: 0 !important;
-        box-shadow: none !important;
-    }
-    div[data-testid="stRadio"] div[role="radiogroup"][aria-orientation="horizontal"] label {
-        gap: 0 !important;
-    }
-    </style>
-    """,
-    unsafe_allow_html=True,
-)
-
 # Business terminology and table/column mappings are maintained in PostgreSQL:
 # public.business_dictionary. The live schema is read from information_schema.
 # Avoid hard-coded sample-database definitions so the app stays aligned with NexaData.
@@ -1122,8 +1101,6 @@ def add_history(mode, question, answer, dataset_name=None, code="", result=None)
 # ------------------------------ Sidebar ---------------------------
 if "history" not in st.session_state:
     st.session_state.history = []
-if "question_mode_selector" not in st.session_state:
-    st.session_state.question_mode_selector = "General Questions"
 if "current" not in st.session_state:
     st.session_state.current = None
 for key, default in {
@@ -1270,17 +1247,7 @@ with st.sidebar:
         st.session_state.show_email_form = False
         st.rerun()
     history_search = st.text_input("Search conversations...", key="history_search", placeholder="Search your questions", label_visibility="collapsed")
-    history_mode = st.session_state.get("question_mode_selector", "General Questions")
-    mode_history = [
-        item for item in st.session_state.history
-        if item.get("mode", "General Questions") == history_mode
-    ]
-    visible_history = [
-        item for item in mode_history
-        if history_search.strip().casefold() in str(item.get("question", "")).casefold()
-    ] if history_search.strip() else mode_history
-    if not visible_history:
-        st.caption(f"No { 'general' if history_mode == 'General Questions' else 'data-specific' } questions in history yet.")
+    visible_history = [item for item in st.session_state.history if history_search.strip().casefold() in str(item.get("question", "")).casefold()] if history_search.strip() else st.session_state.history
     if visible_history:
         for i, item in enumerate(visible_history):
             question_text = str(item.get("question", ""))
@@ -1289,11 +1256,8 @@ with st.sidebar:
             history_col, copy_col = st.columns([6, 1], vertical_alignment="center")
             with history_col:
                 if st.button(f"{'◉' if item.get('mode') == 'Data-Specific Questions' else '○'} {label}", key=f"history_open_{i}", width="stretch", help="Open this conversation"):
-                    opened_mode = item.get("mode", "General Questions")
-                    st.session_state.question_mode_selector = opened_mode
-                    st.session_state.active_question_mode = opened_mode
                     st.session_state.current = {
-                        "mode": opened_mode,
+                        "mode": item.get("mode", "General Questions"),
                         "question": question_text,
                         "answer": item.get("answer", ""),
                         "dataset": item.get("dataset"),
@@ -1380,6 +1344,110 @@ with st.sidebar:
     st.selectbox("Appearance", ["Dark", "Light"], key="nexa_theme")
     st.divider()
     st.caption("NexaData AI · Ask. Analyze. Discover.")
+# --------------------- Data-question help bank ---------------------
+# Refreshes once per 24 hours per database schema. Questions are generated from
+# the live schema and common complex business-analytics patterns; this is not
+# a claim of measured global popularity unless real usage analytics are added.
+FALLBACK_COMPLEX_QUESTIONS = [
+    "Which branches have the highest month-over-month sales growth, and how does their order volume compare?",
+    "Which customers have high order value but declining purchase frequency over the last three months?",
+    "What percentage of total successful payment value comes from each payment method and branch?",
+    "Which products generate the highest net sales after discounts, and how does their margin contribution compare?",
+    "Which customers have placed orders but have no successful payments recorded?",
+    "What is the monthly trend in order count, net sales, and average order value by branch?",
+    "Which invoices are overdue, what is their outstanding amount, and how long have they been overdue?",
+    "Which shipments are delayed compared with expected delivery, grouped by carrier and destination?",
+    "Which products have low stock relative to recent sales velocity and may need replenishment first?",
+    "Which branches have high sales but unusually low successful-payment rates?",
+    "How concentrated are sales among the top 10 customers in each branch?",
+    "Which customers have not purchased recently but had high historical spending?",
+    "What are the top product combinations frequently appearing in the same orders?",
+    "Which months show seasonal peaks in orders, net sales, and payment collections?",
+    "How do successful, pending, and failed payments vary by month and payment method?",
+    "Which products have rising order quantities but falling net sales per unit?",
+    "Which branches have the largest gap between sales-order value and successful payments?",
+    "What is the distribution of order values by branch, and which branches have the most outliers?",
+    "Which customers have multiple orders on the same day, and what is their combined order value?",
+    "Which product categories contribute most to sales growth compared with the previous month?",
+    "Which invoices have partial payments, and what balance remains for each customer?",
+    "What is the average time between order placement and shipment delivery by region?",
+    "Which shipping destinations have the highest delay rate and average delay duration?",
+    "Which products account for most of the stock on hand but contribute relatively little to sales?",
+    "Which customers are responsible for the largest share of overdue invoice balances?",
+    "How do average order value and orders per customer differ between branches?",
+    "Which products have the highest discount rate, and how does discounting relate to net sales?",
+    "Which branches experienced a decline in sales despite an increase in customer orders?",
+    "What is the month-over-month change in successful collections by branch and payment status?",
+    "Which customers have purchases across the widest variety of products?",
+    "Which products have not sold recently despite having inventory available?",
+    "How much net sales is contributed by the top 5 products in each branch?",
+    "Which customers have repeat purchases within 30 days, and how does their spend compare?",
+    "Which payment methods have the highest failure rate after accounting for transaction volume?",
+    "Which branches have the greatest variation in monthly sales over the available period?",
+    "What share of orders are fully paid, partially paid, unpaid, or associated with failed payments?",
+    "Which products show a consistent increase in demand across the last three available months?",
+    "Which shipments are still in transit beyond the typical delivery time for their route?",
+    "Which customers have both overdue invoices and recent orders?",
+    "How do order count, net sales, and payment collections rank across branches each month?",
+    "Which products have high sales value but low quantity sold compared with other products?",
+    "What is the relationship between discounts and net sales across products and branches?",
+    "Which customers' spending changed most between the latest two available months?",
+    "Which branches have the largest difference between order growth and payment-collection growth?",
+    "What percentage of sales comes from returning customers versus customers making their first recorded purchase?",
+    "Which product and branch combinations have the strongest and weakest sales performance?",
+    "Which overdue invoices fall into 1–30, 31–60, 61–90, and over-90-day aging buckets?",
+    "Which customers have unusually high order frequency compared with the overall customer base?",
+    "Which products should be reviewed for excess inventory based on stock levels and recent demand?",
+    "Can you reconcile monthly order-item net sales against successful payment collections and explain the gaps?",
+]
+
+@st.cache_data(ttl=86400, show_spinner=False)
+def generate_daily_complex_questions(schema_text):
+    """Generate a schema-grounded question list and cache it for 24 hours."""
+    if not schema_text or client is None:
+        return FALLBACK_COMPLEX_QUESTIONS
+    prompt = f"""Create exactly 50 distinct, complex but business-friendly natural-language questions for a non-technical business user exploring this database. Focus on multi-table joins, trends, period-over-period comparisons, segmentation, reconciliation, outliers, rankings, data quality, inventory, payments, customers, invoices, and shipments where supported. Prefer questions commonly useful in business analytics, but do not claim to have actual popularity statistics. Use only entities visible in the schema; do not invent columns or assume unsupported relationships. Return only a valid JSON array of 50 strings, no markdown.
+LIVE DATABASE SCHEMA:
+{schema_text[:18000]}"""
+    try:
+        response = require_client().responses.create(
+            model=MODEL_NAME, input=prompt, max_output_tokens=5000
+        )
+        raw = response.output_text.strip()
+        raw = re.sub(r"^```(?:json)?\s*|\s*```$", "", raw, flags=re.IGNORECASE)
+        questions = json.loads(raw)
+        questions = [str(q).strip() for q in questions if str(q).strip()]
+        if len(questions) >= 50:
+            return questions[:50]
+    except Exception:
+        pass
+    return FALLBACK_COMPLEX_QUESTIONS
+
+
+def build_help_questions_pdf(questions):
+    """Create a downloadable PDF guide containing the 50 database question ideas."""
+    buffer = io.BytesIO()
+    doc = SimpleDocTemplate(
+        buffer, pagesize=A4, rightMargin=42, leftMargin=42,
+        topMargin=42, bottomMargin=42,
+    )
+    styles = getSampleStyleSheet()
+    story = [
+        Paragraph("NexaData AI — Database Question Guide", styles["Title"]),
+        Spacer(1, 8),
+        Paragraph(
+            "50 business-focused questions to help explore your database. "
+            "Choose a question in NexaData AI's Data-Specific Questions tab to analyze your data.",
+            styles["BodyText"],
+        ),
+        Spacer(1, 14),
+    ]
+    for index, item in enumerate(questions[:50], start=1):
+        story.append(Paragraph(f"<b>{index}.</b> {html.escape(str(item))}", styles["BodyText"]))
+        story.append(Spacer(1, 7))
+    doc.build(story)
+    return buffer.getvalue()
+
 # ------------------------------ Header ----------------------------
 st.markdown(
     '<div class="dm-hero"><h2>Welcome to NexaData AI</h2>'
@@ -1395,13 +1463,49 @@ if st.session_state.current is None:
         ("📈 Sales summary", "Show total sales by city", "data_question_input"),
         ("🏢 Branch analysis", "Show total customers by branch", "data_question_input"),
         ("🧹 Data quality", "Find missing values and duplicate rows", "data_question_input"),
-        ("🐍 General help", "Explain incremental loading in ETL", "general_question_input"),
     ]
     for idx, (label, prompt, target_key) in enumerate(starter_prompts):
         with starter_cols[idx]:
             if st.button(label, key=f"welcome_prompt_{idx}", width="stretch"):
                 st.session_state[target_key] = prompt
-                st.session_state.pending_question_mode = "General Questions" if target_key == "general_question_input" else "Data-Specific Questions"
+                st.session_state.pending_question_mode = "Data-Specific Questions"
+                st.rerun()
+    # The Help shortcut behaves according to the selected question mode:
+    # General Questions -> highlight the explanatory message above the input.
+    # Data-Specific Questions -> download a PDF with 50 complex database questions.
+    with starter_cols[3]:
+        # Use the live mode selector state on every rerun. In General Questions,
+        # Help is a normal button (so its tooltip never says it downloads a PDF).
+        # In Data-Specific Questions, Help itself is the download control.
+        help_mode = st.session_state.get("question_mode_selector", "General Questions")
+        if help_mode == "Data-Specific Questions":
+            help_schema_text_for_pdf = ""
+            help_config_for_pdf = st.session_state.get("postgres_config")
+            if help_config_for_pdf:
+                try:
+                    help_schema_text_for_pdf = get_postgres_schema(help_config_for_pdf)
+                except Exception:
+                    help_schema_text_for_pdf = ""
+            welcome_help_questions = generate_daily_complex_questions(help_schema_text_for_pdf)
+            welcome_help_pdf = build_help_questions_pdf(welcome_help_questions)
+            st.download_button(
+                label="💡 Help",
+                data=welcome_help_pdf,
+                file_name="NexaData_AI_Database_Question_Guide.pdf",
+                mime="application/pdf",
+                key="welcome_database_question_help_pdf",
+                help=None,
+                width="stretch",
+                on_click="ignore",
+            )
+        else:
+            if st.button(
+                "💡 Help",
+                key="welcome_general_question_help",
+                help=None,
+                width="stretch",
+            ):
+                st.session_state.show_general_help_message = True
                 st.rerun()
 # ------------------------------ Data loading ----------------------
 # Both experiences use matching top-level tabs. Data-specific questions support
@@ -1432,7 +1536,17 @@ if "postgres_tables" not in st.session_state:
 
 if selected_question_mode == "General Questions":
     with general_tab:
-        st.caption("Ask about concepts, coding, SQL, Python, data engineering, or other general topics.")
+        general_help_message = "Ask about concepts, coding, SQL, Python, data engineering, or other general topics."
+        if st.session_state.get("show_general_help_message", False):
+            st.markdown(
+                '<div style="padding:12px 15px;border-radius:10px;'
+                'border:1px solid #38BDF8;background:rgba(56,189,248,0.13);'
+                'color:var(--text-color);font-weight:600;margin-bottom:12px;">'
+                '💡 ' + html.escape(general_help_message) + '</div>',
+                unsafe_allow_html=True,
+            )
+        else:
+            st.caption(general_help_message)
         with st.form("general_question_form", clear_on_submit=False):
             st.markdown('<div class="nexa-send-row">', unsafe_allow_html=True)
             general_input_col, general_send_col = st.columns([12, 1], vertical_alignment="center", gap="small")
@@ -1452,6 +1566,7 @@ if selected_question_mode == "General Questions":
             question = str(general_question or "")
             mode = "General Questions"
             st.session_state.active_question_mode = mode
+            st.session_state.show_general_help_message = False
             ask_clicked = True
 
 else:
@@ -1524,8 +1639,8 @@ if ask_clicked:
                         "code": generated_code, "result": result,
                     }
                 st.session_state.current = current
-                # Select the matching question mode before rerunning so the answer and history
-                # stay associated with the mode that submitted the question.
+                # Select the matching question mode before rerunning so the answer
+                # remains visible in the correct mode instead of reverting to General.
                 st.session_state.pending_question_mode = mode
                 st.session_state.show_full_result = False
                 st.session_state.show_download_options = False
@@ -1553,10 +1668,6 @@ if ask_clicked:
             st.error(f"Could not process the question: {exc}")
 # ------------------------------ Result ----------------------------
 current = st.session_state.current
-# Keep the last answer attached to its own question mode. Switching modes hides
-# the other mode's answer without deleting it; switching back restores it.
-if current is not None and current.get("mode", "General Questions") != selected_question_mode:
-    current = None
 if current is not None:
     result_tab = data_tab if current.get("mode") == "Data-Specific Questions" else general_tab
     with result_tab:
