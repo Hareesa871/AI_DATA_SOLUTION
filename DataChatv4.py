@@ -729,13 +729,16 @@ def safe_filename(question):
         chosen = "_".join(words) or "nexadata_insight_report"
     suffix = datetime.now().strftime("%Y-%m")
     return f"{chosen[:48].strip('_')}_{suffix}"
-def generate_excel(result):
+def generate_excel(result, visualization_data=None):
     buffer = io.BytesIO()
-    result_to_df(result).to_excel(
-        buffer, index=False, sheet_name="Analysis Result", engine="openpyxl"
-    )
+    analysis_df = result_to_df(result)
+    visualization_df = result_to_df(visualization_data) if visualization_data is not None else analysis_df.copy()
+    with pd.ExcelWriter(buffer, engine="openpyxl") as writer:
+        analysis_df.to_excel(writer, index=False, sheet_name="Analysis Result")
+        visualization_df.to_excel(writer, index=False, sheet_name="Visualization Data")
+    buffer.seek(0)
     return buffer.getvalue()
-def generate_pdf(question, dataset_name, result, summary="", generated_sql=""):
+def generate_pdf(question, dataset_name, result, summary="", generated_sql="", visualization_data=None, chart_figure=None):
     """Build a compact insight report with summary, chart, result table and SQL."""
     output_df = result_to_df(result) if result is not None else pd.DataFrame()
     buffer = io.BytesIO()
@@ -761,7 +764,7 @@ def generate_pdf(question, dataset_name, result, summary="", generated_sql=""):
             matplotlib.use("Agg")
             import matplotlib.pyplot as plt
             numeric = []
-            plot_df = output_df.copy()
+            plot_df = result_to_df(visualization_data).copy() if visualization_data is not None else output_df.copy()
             for col in plot_df.columns:
                 vals = pd.to_numeric(plot_df[col], errors="coerce")
                 if vals.notna().sum() >= 2:
@@ -789,6 +792,29 @@ def generate_pdf(question, dataset_name, result, summary="", generated_sql=""):
                 story.extend([Paragraph("Chart overview", styles["Heading2"]), RLImage(image_buffer, width=480, height=175), Spacer(1, 8)])
         except Exception:
             pass
+        if visualization_data is not None:
+            visualization_df = result_to_df(visualization_data)
+            story.append(Paragraph("Visualization Data", styles["Heading2"]))
+            vis_pdf_df = visualization_df.fillna("").astype(str)
+            vis_data = [[str(c)[:40] for c in vis_pdf_df.columns]]
+            vis_data.extend([[str(v)[:100] for v in row] for row in vis_pdf_df.itertuples(index=False, name=None)])
+            vis_table = LongTable(vis_data, repeatRows=1, splitByRow=1)
+            vis_table.setStyle(TableStyle([
+                ("BACKGROUND", (0, 0), (-1, 0), colors.HexColor("#243b80")),
+                ("TEXTCOLOR", (0, 0), (-1, 0), colors.white),
+                ("GRID", (0, 0), (-1, -1), 0.4, colors.grey),
+                ("ALIGN", (0, 0), (-1, -1), "LEFT"),
+                ("FONTSIZE", (0, 0), (-1, -1), 7),
+                ("VALIGN", (0, 0), (-1, -1), "TOP"),
+            ]))
+            story.extend([vis_table, Spacer(1, 8)])
+        if chart_figure is not None:
+            try:
+                chart_bytes = chart_figure.to_image(format="png", width=1100, height=650, scale=1)
+                chart_buffer = io.BytesIO(chart_bytes)
+                story.extend([Paragraph("Current Visualization", styles["Heading2"]), RLImage(chart_buffer, width=500, height=290), Spacer(1, 8)])
+            except Exception:
+                pass
         story.append(Paragraph("Result table", styles["Heading2"]))
         # Include every row in the PDF, not just a preview subset.
         pdf_df = output_df.fillna("").astype(str)
@@ -1047,6 +1073,39 @@ def save_history_item(config, item):
             )
 
 
+def update_latest_history_item(config, item):
+    """Update the latest saved history row for this mode and question after edited SQL runs."""
+    if not config:
+        return
+    ensure_history_table(config)
+    answer = item.get("answer")
+    answer_text = answer if isinstance(answer, str) else "Data result"
+    result_payload = result_to_history_json(item.get("result"))
+    with psycopg.connect(**config) as conn:
+        with conn.cursor() as cur:
+            cur.execute(
+                """
+                UPDATE app.chat_history
+                SET answer = %s, answer_text = %s, dataset_name = %s,
+                    generated_code = %s, result_json = %s::jsonb
+                WHERE id = (
+                    SELECT id FROM app.chat_history
+                    WHERE session_id = %s AND mode = %s AND question = %s
+                    ORDER BY created_at DESC, id DESC LIMIT 1
+                )
+                """,
+                (
+                    answer_text or "", answer_text or "", item.get("dataset"),
+                    item.get("code", ""),
+                    json.dumps(result_payload, default=str) if result_payload is not None else None,
+                    history_session_id(), item.get("mode", "Data-Specific Questions"),
+                    item.get("question", ""),
+                ),
+            )
+            if cur.rowcount == 0:
+                save_history_item(config, item)
+
+
 def load_history_from_postgres(config, limit=50):
     if not config:
         return []
@@ -1106,6 +1165,13 @@ if "history" not in st.session_state:
     st.session_state.history = []
 if "current" not in st.session_state:
     st.session_state.current = None
+if "conversation_by_mode" not in st.session_state:
+    st.session_state.conversation_by_mode = {
+        "General Questions": None,
+        "Data-Specific Questions": None,
+    }
+if "question_mode_selector" not in st.session_state:
+    st.session_state.question_mode_selector = "General Questions"
 for key, default in {
     "show_full_result": False,
     "show_download_options": False,
@@ -1249,8 +1315,20 @@ with st.sidebar:
         st.session_state.show_download_options = False
         st.session_state.show_email_form = False
         st.rerun()
-    history_search = st.text_input("Search conversations...", key="history_search", placeholder="Search your questions", label_visibility="collapsed")
-    visible_history = [item for item in st.session_state.history if history_search.strip().casefold() in str(item.get("question", "")).casefold()] if history_search.strip() else st.session_state.history
+    history_mode = st.session_state.get("question_mode_selector", "General Questions")
+    history_search_key = "history_search_general" if history_mode == "General Questions" else "history_search_data"
+    history_search = st.text_input(
+        "Search conversations...", key=history_search_key,
+        placeholder="Search your questions", label_visibility="collapsed"
+    )
+    mode_history = [
+        item for item in st.session_state.history
+        if item.get("mode", "General Questions") == history_mode
+    ]
+    visible_history = [
+        item for item in mode_history
+        if history_search.strip().casefold() in str(item.get("question", "")).casefold()
+    ] if history_search.strip() else mode_history
     if visible_history:
         for i, item in enumerate(visible_history):
             question_text = str(item.get("question", ""))
@@ -1259,7 +1337,7 @@ with st.sidebar:
             history_col, copy_col = st.columns([6, 1], vertical_alignment="center")
             with history_col:
                 if st.button(f"{'◉' if item.get('mode') == 'Data-Specific Questions' else '○'} {label}", key=f"history_open_{i}", width="stretch", help="Open this conversation"):
-                    st.session_state.current = {
+                    opened_item = {
                         "mode": item.get("mode", "General Questions"),
                         "question": question_text,
                         "answer": item.get("answer", ""),
@@ -1267,6 +1345,9 @@ with st.sidebar:
                         "code": item.get("code", ""),
                         "result": item.get("result"),
                     }
+                    st.session_state.current = opened_item
+                    st.session_state.conversation_by_mode[opened_item["mode"]] = opened_item
+                    st.session_state.pending_question_mode = opened_item["mode"]
                     st.session_state.show_full_result = False
                     st.session_state.show_download_options = False
                     st.session_state.show_email_form = False
@@ -1336,10 +1417,24 @@ with st.sidebar:
         st.caption("Your questions will appear here.")
     if st.button("Clear History", width="stretch"):
         try:
+            clear_mode = st.session_state.get("question_mode_selector", "General Questions")
             if st.session_state.get("postgres_config"):
-                delete_history_from_postgres(st.session_state.postgres_config)
-            st.session_state.history = []
-            st.session_state.current = None
+                config = st.session_state.postgres_config
+                ensure_history_table(config)
+                with psycopg.connect(**config) as conn:
+                    with conn.cursor() as cur:
+                        cur.execute(
+                            "DELETE FROM app.chat_history WHERE session_id = %s AND mode = %s",
+                            (history_session_id(), clear_mode),
+                        )
+            st.session_state.history = [
+                item for item in st.session_state.history
+                if item.get("mode", "General Questions") != clear_mode
+            ]
+            st.session_state.conversation_by_mode[clear_mode] = None
+            st.session_state.current = st.session_state.conversation_by_mode.get(
+                "Data-Specific Questions" if clear_mode == "General Questions" else "General Questions"
+            )
             st.rerun()
         except Exception as exc:
             st.error(f"Could not clear PostgreSQL history: {exc}")
@@ -1527,6 +1622,8 @@ selected_question_mode = st.radio(
 )
 general_tab = st.container()
 data_tab = st.container()
+# Restore the answer belonging to the selected mode; never display the other mode's answer.
+st.session_state.current = st.session_state.conversation_by_mode.get(selected_question_mode)
 # Keep the dataset and source selected in the sidebar; do not reset them here.
 source_mode = st.session_state.get("dataset_source_mode", "PostgreSQL")
 mode = None
@@ -1642,6 +1739,7 @@ if ask_clicked:
                         "code": generated_code, "result": result,
                     }
                 st.session_state.current = current
+                st.session_state.conversation_by_mode[mode] = current
                 # Select the matching question mode before rerunning so the answer
                 # remains visible in the correct mode instead of reverting to General.
                 st.session_state.pending_question_mode = mode
@@ -1672,6 +1770,8 @@ if ask_clicked:
 # ------------------------------ Result ----------------------------
 current = st.session_state.current
 if current is not None:
+    st.session_state.current_visualization_data = result_to_df(current.get("result")) if current.get("mode") == "Data-Specific Questions" and current.get("result") is not None else pd.DataFrame()
+    st.session_state.current_visualization_fig = None
     result_tab = data_tab if current.get("mode") == "Data-Specific Questions" else general_tab
     with result_tab:
         st.divider()
@@ -1743,15 +1843,21 @@ if current is not None:
                     if not y_cols:
                         st.info("Select at least one numeric measure to build a chart.")
                     elif chart_type == "Histogram":
+                        visualization_export_df = chart_df[[y_cols[0]]].copy()
                         fig = px.histogram(chart_df, x=y_cols[0], title=f"Distribution of {y_cols[0]}")
                         st.plotly_chart(fig, use_container_width=True)
+                        st.session_state.current_visualization_data = visualization_export_df
+                        st.session_state.current_visualization_fig = fig
                     elif chart_type == "Scatter":
                         scatter_x = x_col if x_col in numeric_cols else (numeric_cols[1] if len(numeric_cols) > 1 else numeric_cols[0])
                         scatter_y = next((col for col in y_cols if col != scatter_x), y_cols[0])
                         if scatter_x == scatter_y and len(numeric_cols) > 1:
                             scatter_y = numeric_cols[1] if numeric_cols[0] == scatter_x else numeric_cols[0]
+                        visualization_export_df = chart_df[[scatter_x, scatter_y]].copy()
                         fig = px.scatter(chart_df, x=scatter_x, y=scatter_y, title=f"{scatter_y} vs {scatter_x}")
                         st.plotly_chart(fig, use_container_width=True)
+                        st.session_state.current_visualization_data = visualization_export_df
+                        st.session_state.current_visualization_fig = fig
                     elif chart_type == "Pie":
                         pie_names = x_col if x_col not in numeric_cols else next((c for c in categorical_cols), None)
                         if pie_names:
@@ -1759,8 +1865,11 @@ if current is not None:
                             if aggregation != "None":
                                 agg_map = {"Sum":"sum", "Average":"mean", "Minimum":"min", "Maximum":"max", "Count":"count"}
                                 pie_df = pie_df.groupby(pie_names, dropna=False, as_index=False)[y_cols[0]].agg(agg_map.get(aggregation, "sum"))
+                            visualization_export_df = pie_df.head(30).copy()
                             fig = px.pie(pie_df.head(30), names=pie_names, values=y_cols[0], title=f"{y_cols[0]} by {pie_names}")
                             st.plotly_chart(fig, use_container_width=True)
+                            st.session_state.current_visualization_data = visualization_export_df
+                            st.session_state.current_visualization_fig = fig
                         else:
                             st.info("Pie charts need a categorical dimension and one numeric measure.")
                     else:
@@ -1783,6 +1892,8 @@ if current is not None:
                             fig = px.area(plot_df, x=x_col, y=y_cols, color=color, title=title)
                         fig.update_layout(legend_title_text="Measure / group", margin=dict(l=12, r=12, t=50, b=12))
                         st.plotly_chart(fig, use_container_width=True)
+                        st.session_state.current_visualization_data = plot_df.copy()
+                        st.session_state.current_visualization_fig = fig
                     st.caption("Tip: choose a dimension and one or more measures to compare metrics in a visualization.")
                 else:
                     st.info("This result needs at least two rows and one numeric column to build a chart.")
@@ -1820,19 +1931,23 @@ if current is not None:
                     "Format", ["CSV", "Excel", "PDF"],
                     key="download_format_choice", label_visibility="collapsed",
                 )
+                visualization_export_df = st.session_state.get("current_visualization_data", display_result)
+                current_chart_fig = st.session_state.get("current_visualization_fig")
                 if download_format == "CSV":
-                    download_data = display_result.to_csv(index=False).encode("utf-8-sig")
-                    download_name = f"{file_title}.csv"
+                    download_data = visualization_export_df.to_csv(index=False).encode("utf-8-sig")
+                    download_name = f"{file_title}_visualization.csv"
                     download_mime = "text/csv"
                 elif download_format == "Excel":
-                    download_data = generate_excel(display_result)
+                    download_data = generate_excel(display_result, visualization_export_df)
                     download_name = f"{file_title}.xlsx"
                     download_mime = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
                 else:
                     insight_summary = summarize_result(display_result)
                     download_data = generate_pdf(
                         current["question"], current.get("dataset"), display_result,
-                        insight_summary, current.get("code", "")
+                        insight_summary, current.get("code", ""),
+                        visualization_data=visualization_export_df,
+                        chart_figure=current_chart_fig,
                     )
                     download_name = f"{file_title}.pdf"
                     download_mime = "application/pdf"
@@ -1859,9 +1974,15 @@ if current is not None:
                 else:
                     try:
                         if is_data_result:
-                            csv_data = display_result.to_csv(index=False).encode("utf-8-sig")
-                            excel_data = generate_excel(result)
-                            pdf_data = generate_pdf(current["question"], current.get("dataset"), result, summarize_result(display_result), current.get("code", ""))
+                            visualization_export_df = st.session_state.get("current_visualization_data", display_result)
+                            csv_data = visualization_export_df.to_csv(index=False).encode("utf-8-sig")
+                            excel_data = generate_excel(display_result, visualization_export_df)
+                            pdf_data = generate_pdf(
+                                current["question"], current.get("dataset"), display_result,
+                                summarize_result(display_result), current.get("code", ""),
+                                visualization_data=visualization_export_df,
+                                chart_figure=st.session_state.get("current_visualization_fig"),
+                            )
                             send_report_email(
                                 recipient.strip(), current["question"], current.get("dataset"),
                                 file_title, csv_data, excel_data, pdf_data,
@@ -1886,7 +2007,55 @@ if current is not None:
         if is_data_result and current.get("code"):
             st.divider()
             with st.expander("SQL preview & explanation", expanded=False):
-                st.code(current["code"], language="sql")
+                sql_editor_key = "sql_editor_" + str(abs(hash((current.get("mode"), current.get("question"), current.get("code", "")))))
+                edited_sql = st.text_area(
+                    "Edit SQL query",
+                    value=current["code"],
+                    key=sql_editor_key,
+                    height=220,
+                )
+                if st.button("Run edited SQL", key="run_edited_sql_button", type="primary"):
+                    try:
+                        with st.spinner("Executing edited SQL..."):
+                            is_postgres_query = str(current.get("dataset") or "").startswith("PostgreSQL:")
+                            if is_postgres_query:
+                                edited_result = execute_postgres_query(edited_sql, st.session_state.postgres_config)
+                            else:
+                                if df is None or df.empty:
+                                    raise ValueError("The original uploaded dataset is no longer loaded. Upload the same file and retry.")
+                                edited_result = execute_local_sql(edited_sql, df)
+                            updated_current = dict(current)
+                            updated_current["code"] = clean_code(edited_sql)
+                            updated_current["result"] = edited_result
+                            updated_current["answer"] = edited_result
+                            st.session_state.current = updated_current
+                            st.session_state.conversation_by_mode[updated_current["mode"]] = updated_current
+                            # Update the matching in-memory history entry, not a new unrelated question.
+                            for history_item in st.session_state.history:
+                                if (
+                                    history_item.get("mode") == updated_current["mode"]
+                                    and history_item.get("question") == updated_current["question"]
+                                ):
+                                    history_item["code"] = updated_current["code"]
+                                    history_item["result"] = edited_result
+                                    history_item["answer"] = "Data result"
+                                    break
+                            config = st.session_state.get("postgres_config")
+                            if config and is_postgres_query:
+                                try:
+                                    update_latest_history_item(config, {
+                                        **updated_current,
+                                        "answer": "Data result",
+                                    })
+                                    st.session_state.pop("history_save_error", None)
+                                except Exception as history_exc:
+                                    st.warning(f"SQL ran successfully, but history could not be updated: {history_exc}")
+                            st.session_state.show_full_result = False
+                            st.session_state.show_email_form = False
+                            st.session_state.show_download_options = False
+                            st.rerun()
+                    except Exception as exc:
+                        st.error(f"Could not run edited SQL: {exc}")
                 explanation_key = "sql_explanation_" + str(abs(hash(current["code"])))
                 if st.button("Explain this SQL", key="explain_sql_button"):
                     try:
