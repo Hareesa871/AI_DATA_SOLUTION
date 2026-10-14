@@ -12,6 +12,8 @@ import re
 import smtplib
 from email.message import EmailMessage
 from pathlib import Path
+from datetime import datetime
+from zoneinfo import ZoneInfo
 import pandas as pd
 import streamlit as st
 import streamlit.components.v1 as components
@@ -28,11 +30,14 @@ from reportlab.platypus import (
     SimpleDocTemplate,
     Spacer,
     TableStyle,
+    Image as RLImage,
+    Preformatted,
 )
+import plotly.express as px
 # --------------------------- Page setup ---------------------------
 st.set_page_config(
     page_title="NexaData AI",
-    page_icon="🧠",
+    page_icon="📊",
     layout="wide",
     initial_sidebar_state="expanded",
 )
@@ -45,6 +50,7 @@ except Exception:
     secret_api_key = ""
 api_key = (os.getenv("OPENAI_API_KEY") or secret_api_key or API_KEY).strip()
 client = OpenAI(api_key=api_key) if api_key else None
+theme_mode = st.session_state.get("nexa_theme", "Dark")
 # ------------------------------ Styling ---------------------------
 st.markdown(
     """
@@ -93,6 +99,61 @@ st.markdown(
     [data-testid="stExpander"] { border: 1px solid #1c2b45; border-radius: 14px; background: #0a1225; }
     hr { border-color: #1b2b45; }
     [data-testid="stCaptionContainer"] { color: #93a4be; }
+    /* ChatGPT-style question-mode tabs: hide radio circles and underline the active option. */
+    div[data-testid="stRadio"] div[role="radiogroup"][aria-orientation="horizontal"] {
+      display: flex !important;
+      align-items: stretch !important;
+      gap: 1.15rem !important;
+      border-bottom: 1px solid #263449 !important;
+      width: 100% !important;
+    }
+    div[data-testid="stRadio"] div[role="radiogroup"][aria-orientation="horizontal"] label {
+      display: inline-flex !important;
+      align-items: center !important;
+      gap: .45rem !important;
+      padding: .65rem .15rem .75rem !important;
+      margin: 0 !important;
+      border: 0 !important;
+      border-bottom: 3px solid transparent !important;
+      border-radius: 0 !important;
+      background: transparent !important;
+      color: #aebbd0 !important;
+      white-space: nowrap !important;
+      font-size: 1rem !important;
+    }
+    /* Remove the actual Streamlit radio indicators (circles), not the tab labels. */
+    div[data-testid="stRadio"] div[role="radiogroup"][aria-orientation="horizontal"] label > div:first-child,
+    div[data-testid="stRadio"] div[role="radiogroup"][aria-orientation="horizontal"] label > div:first-child *,
+    div[data-testid="stRadio"] div[role="radiogroup"][aria-orientation="horizontal"] label input[type="radio"],
+    div[data-testid="stRadio"] div[role="radiogroup"][aria-orientation="horizontal"] [data-baseweb="radio"],
+    div[data-testid="stRadio"] div[role="radiogroup"][aria-orientation="horizontal"] [data-baseweb="radio"] * {
+      display: none !important;
+      visibility: hidden !important;
+      width: 0 !important;
+      min-width: 0 !important;
+      margin: 0 !important;
+      padding: 0 !important;
+      border: 0 !important;
+      box-shadow: none !important;
+    }
+    div[data-testid="stRadio"] div[role="radiogroup"][aria-orientation="horizontal"] label {
+      gap: 0 !important;
+    }
+    div[data-testid="stRadio"] div[role="radiogroup"][aria-orientation="horizontal"] label:has(input:checked) {
+      color: #ff5364 !important;
+      border-bottom-color: #ff5364 !important;
+      font-weight: 600 !important;
+    }
+    div[data-testid="stRadio"] div[role="radiogroup"][aria-orientation="horizontal"] label:hover {
+      color: #ff5364 !important;
+      background: transparent !important;
+    }
+    /* Compact ChatGPT-like send-arrow control in the question form */
+    .nexa-send-row div[data-testid="stFormSubmitButton"] button {
+      min-height: 2.7rem; width: 2.7rem; min-width: 2.7rem; padding: 0;
+      border-radius: 50%; font-size: 1.35rem; font-weight: 700;
+    }
+    .nexa-send-row div[data-testid="stFormSubmitButton"] button p { font-size: 1.35rem; margin: 0; }
     @media (max-width: 700px) {
       .block-container { padding-left: .75rem; padding-right: .75rem; padding-top: .6rem; }
       .dm-hero { padding: 1.35rem .8rem; border-radius: 20px; }
@@ -102,9 +163,108 @@ st.markdown(
     """,
     unsafe_allow_html=True,
 )
+if theme_mode == "Light":
+    st.markdown(
+        """<style>
+        :root { --nexa-bg:#f4f7fb; --nexa-panel:#ffffff; --nexa-border:#d9e2ef; --nexa-text:#182338; --nexa-muted:#52627a; --nexa-blue:#087fbd; }
+        :root { color-scheme: light; }
+        .stApp, [data-testid="stAppViewContainer"] { background:linear-gradient(145deg,#f7faff,#edf3fb 72%) !important; color:#182338 !important; }
+        [data-testid="stSidebar"] { background:#ffffff !important; border-right:1px solid #d9e2ef; }
+        [data-testid="stSidebar"], [data-testid="stSidebar"] * { color:#182338 !important; }
+        .dm-brand { color:#14213a !important; }
+        .dm-hero { background:linear-gradient(145deg,#ffffff,#edf5ff); border-color:#d9e2ef; box-shadow:0 12px 32px rgba(24,35,56,.08); }
+        .dm-hero h2 { color:#182338 !important; } .dm-hero p,.dm-tagline { color:#52627a !important; }
+        .dm-card, [data-testid="stExpander"], [data-testid="stPopover"] { background:#fff !important; border-color:#d9e2ef !important; color:#182338 !important; }
+        h1,h2,h3,h4,h5,h6,p,li,label,span,small,div,summary { color:#182338; }
+        [data-testid="stMarkdownContainer"], [data-testid="stMarkdownContainer"] p,
+        [data-testid="stMarkdownContainer"] li, [data-testid="stCaptionContainer"] { color:#334155 !important; }
+        div[data-testid="stTabs"] button[role="tab"] { background:#fff !important; color:#334155 !important; border-color:#d9e2ef !important; }
+        div[data-testid="stTabs"] button[role="tab"][aria-selected="true"] { background:#dbeafe !important; color:#0f3b72 !important; border-color:#60a5fa !important; }
+        div[data-testid="stRadio"] div[role="radiogroup"][aria-orientation="horizontal"] { border-bottom-color:#d9e2ef !important; }
+        div[data-testid="stRadio"] div[role="radiogroup"][aria-orientation="horizontal"] label { color:#52627a !important; }
+        div[data-testid="stRadio"] div[role="radiogroup"][aria-orientation="horizontal"] label:has(input:checked) { color:#e33f54 !important; border-bottom-color:#e33f54 !important; }
+        div[data-testid="stRadio"] div[role="radiogroup"][aria-orientation="horizontal"] label:hover { color:#e33f54 !important; }
+        input, textarea, [data-baseweb="select"] > div, [data-baseweb="input"] > div,
+        [data-testid="stNumberInput"] input, [data-testid="stDateInput"] input {
+          background:#fff !important; color:#182338 !important; border-color:#cbd5e1 !important;
+        }
+        input::placeholder, textarea::placeholder { color:#64748b !important; opacity:1 !important; }
+        [data-baseweb="select"] *, [role="listbox"], [role="option"], [data-baseweb="popover"] * { color:#182338 !important; }
+        [role="listbox"], [role="option"], [data-baseweb="popover"] { background:#fff !important; }
+        div.stButton > button, div.stFormSubmitButton > button, div.stDownloadButton > button {
+          background:#fff !important; color:#182338 !important; border-color:#cbd5e1 !important;
+        }
+        div.stButton > button[kind="primary"], div.stFormSubmitButton > button[kind="primary"] {
+          background:#087fbd !important; color:#fff !important; border-color:#087fbd !important;
+        }
+        [data-testid="stDataFrame"], [data-testid="stTable"] { border-color:#d9e2ef !important; }
+        [data-testid="stAlert"] * { color:#182338 !important; }
+        [data-testid="stCaptionContainer"] { color:#52627a !important; }
+        hr { border-color:#d9e2ef !important; }
+        </style>""", unsafe_allow_html=True
+    )
+# Ensure the question-mode selector has no visible radio circles in either theme.
+st.markdown(
+    """
+    <style>
+    div[data-testid="stRadio"] div[role="radiogroup"][aria-orientation="horizontal"] [data-baseweb="radio"],
+    div[data-testid="stRadio"] div[role="radiogroup"][aria-orientation="horizontal"] [data-baseweb="radio"] *,
+    div[data-testid="stRadio"] div[role="radiogroup"][aria-orientation="horizontal"] label input[type="radio"],
+    div[data-testid="stRadio"] div[role="radiogroup"][aria-orientation="horizontal"] label > div:first-child {
+        display: none !important;
+        visibility: hidden !important;
+        width: 0 !important;
+        min-width: 0 !important;
+        margin: 0 !important;
+        padding: 0 !important;
+        border: 0 !important;
+        box-shadow: none !important;
+    }
+    div[data-testid="stRadio"] div[role="radiogroup"][aria-orientation="horizontal"] label {
+        gap: 0 !important;
+    }
+    </style>
+    """,
+    unsafe_allow_html=True,
+)
+
 # Business terminology and table/column mappings are maintained in PostgreSQL:
 # public.business_dictionary. The live schema is read from information_schema.
 # Avoid hard-coded sample-database definitions so the app stays aligned with NexaData.
+# ------------------------------ Send-arrow color override ---------------------------
+# Keep both question send-arrow buttons cyan-blue in Dark and Light themes.
+st.markdown(
+    """
+    <style>
+    div[data-testid="stFormSubmitButton"] > button,
+    div[data-testid="stFormSubmitButton"] > button[kind="primary"],
+    div.stFormSubmitButton > button,
+    div.stFormSubmitButton > button[kind="primary"] {
+        background: #38BDF8 !important;
+        background-color: #38BDF8 !important;
+        border: 1px solid #38BDF8 !important;
+        color: #082032 !important;
+        box-shadow: none !important;
+    }
+    div[data-testid="stFormSubmitButton"] > button:hover,
+    div[data-testid="stFormSubmitButton"] > button[kind="primary"]:hover,
+    div.stFormSubmitButton > button:hover,
+    div.stFormSubmitButton > button[kind="primary"]:hover {
+        background: #0EA5E9 !important;
+        background-color: #0EA5E9 !important;
+        border-color: #0EA5E9 !important;
+        color: #FFFFFF !important;
+    }
+    div[data-testid="stFormSubmitButton"] > button:focus,
+    div.stFormSubmitButton > button:focus {
+        outline: none !important;
+        box-shadow: 0 0 0 3px rgba(56, 189, 248, .30) !important;
+    }
+    </style>
+    """,
+    unsafe_allow_html=True,
+)
+
 # ------------------------------ Helpers ---------------------------
 @st.cache_data(show_spinner=False)
 def read_dataset(file_path, file_bytes=None):
@@ -280,20 +440,177 @@ def require_client():
             "A valid API key and available API credits are required."
         )
     return client
-def ask_general(question):
-    response = require_client().responses.create(
-        model=MODEL_NAME,
-        input=(
-            "You are NexaData AI, a clear and helpful assistant. "
-            "Answer the user's general question accurately and practically. "
-            "Use headings or short bullet points when useful. Do not claim "
-            "to have inspected the user's dataset unless the question asks "
-            "about data and dataset context is provided.\n\n"
-            f"User question: {question}"
-        ),
-        max_output_tokens=900,
+def is_live_information_question(question):
+    """Identify questions that should use live web search instead of model memory."""
+    q = (question or "").casefold()
+    live_terms = (
+        "today", "tonight", "this morning", "right now", "currently",
+        "latest", "breaking", "headlines", "news", "weather", "forecast",
+        "stock price", "share price", "exchange rate", "current price",
+        "recent update", "recent updates", "this week", "yesterday",
+        "who won", "live score", "traffic", "open now", "as of today",
     )
+    return any(term in q for term in live_terms)
+
+
+def stream_general_answer(question):
+    """Stream general answers; use live web search for current/time-sensitive questions."""
+    current_datetime = datetime.now(ZoneInfo("Asia/Kolkata"))
+    current_datetime_text = current_datetime.strftime("%A, %d %B %Y, %I:%M:%S %p IST")
+    needs_live_search = is_live_information_question(question)
+
+    system_instructions = (
+        "You are NexaData AI, a clear and helpful assistant. "
+        "Answer the user's general question accurately and practically. "
+        "Use headings or short bullet points when useful. Do not claim "
+        "to have inspected the user's dataset unless the question asks "
+        "about data and dataset context is provided.\n"
+        f"CURRENT DATE AND TIME (authoritative, Asia/Kolkata): {current_datetime_text}.\n"
+        "For questions about today's date, the current date, today, or the current time, "
+        "use the authoritative date/time above. Do not substitute a date from pretrained knowledge. "
+        "If asked for the date only, answer with the date and year clearly.\n"
+    )
+
+    if needs_live_search:
+        system_instructions += (
+            "This question needs current information. Use the web_search tool before answering. "
+            "Do not say you lack real-time access when web search is available. "
+            "Prioritize recent, credible sources and verify publication dates. "
+            "For news requests, summarize the most important current stories relevant to the requested place, "
+            "state the date in Asia/Kolkata, and include source names with clickable URLs. "
+            "Clearly distinguish confirmed facts from developing reports. If search results are insufficient, "
+            "say what could not be verified rather than inventing headlines.\n"
+        )
+
+    request = {
+        "model": MODEL_NAME,
+        "input": system_instructions + f"\nUser question: {question}",
+        "max_output_tokens": 1200,
+        "stream": True,
+    }
+    if needs_live_search:
+        request["tools"] = [{"type": "web_search"}]
+        request["tool_choice"] = "required"
+
+    stream = require_client().responses.create(**request)
+    for event in stream:
+        if getattr(event, "type", "") == "response.output_text.delta":
+            delta = getattr(event, "delta", "")
+            if delta:
+                yield delta
+
+def ask_general(question):
+    """Non-streaming compatibility helper for places that need a final string."""
+    return "".join(stream_general_answer(question)).strip()
+
+def prompt_suggestions(text, mode="general"):
+    """Return compact, relevant prompt completions without another API call."""
+    value = (text or "").strip()
+    general = [
+        "Explain incremental loading in ETL with an example",
+        "Compare a data warehouse and a database",
+        "Show me a practical SQL window function example",
+        "Explain how to optimize a slow SQL query",
+    ]
+    data = [
+        "Show total sales by month",
+        "Break this down by state",
+        "Compare this month with last month",
+        "Find outliers and missing values",
+        "Show the top 10 records by total amount",
+    ]
+    choices = data if mode == "data" else general
+    if not value:
+        return choices[:3]
+    lower = value.casefold()
+    # First show phrase completions that begin with the user's text, then useful follow-ups.
+    matches = [item for item in choices if item.casefold().startswith(lower) and item.casefold() != lower]
+    if not matches:
+        tokens = set(re.findall(r"[a-z0-9_]+", lower))
+        matches = [item for item in choices if tokens.intersection(re.findall(r"[a-z0-9_]+", item.casefold())) and item.casefold() != lower]
+    matches.extend(item for item in choices if item not in matches and item.casefold() != lower)
+    return matches[:3]
+
+def set_prompt_value(key, value):
+    st.session_state[key] = value
+
+def explain_sql_in_plain_english(query):
+    prompt = (
+        "Explain this read-only SQL query in plain English for a business user. "
+        "Describe the tables, joins, filters, grouping, and output. Do not execute it.\n\n"
+        f"SQL:\n{query}"
+    )
+    response = require_client().responses.create(model=MODEL_NAME, input=prompt, max_output_tokens=450)
     return response.output_text.strip()
+
+def left_aligned_frame(frame):
+    """Return a pandas Styler that left-aligns every result cell and header."""
+    return frame.style.set_properties(**{"text-align": "left"}).set_table_styles([
+        {"selector": "th", "props": [("text-align", "left")]},
+        {"selector": "td", "props": [("text-align", "left")]},
+    ])
+
+def automatic_data_insights(frame):
+    """Summarize missing values, duplicates, numeric spread/outliers and date trends."""
+    if frame is None or frame.empty:
+        return ["The result is empty, so there are no rows to profile."]
+    notes = []
+    missing = frame.isna().sum()
+    missing = missing[missing > 0].sort_values(ascending=False)
+    if len(missing):
+        notes.append("Missing values: " + ", ".join(f"{col} ({int(count)})" for col, count in missing.head(4).items()))
+    else:
+        notes.append("No missing values were found in the displayed result.")
+    duplicates = int(frame.duplicated().sum())
+    notes.append(f"Exact duplicate rows: {duplicates:,}.")
+    numeric_cols = []
+    numeric_frame = frame.copy()
+    for col in frame.columns:
+        converted = pd.to_numeric(frame[col], errors="coerce")
+        if converted.notna().sum() >= 2:
+            numeric_frame[col] = converted
+            numeric_cols.append(col)
+    for col in numeric_cols[:3]:
+        series = numeric_frame[col].dropna()
+        if series.empty:
+            continue
+        q1, q3 = series.quantile(.25), series.quantile(.75)
+        iqr = q3 - q1
+        outliers = int(((series < q1 - 1.5 * iqr) | (series > q3 + 1.5 * iqr)).sum()) if iqr else 0
+        notes.append(f"{col}: min {series.min():,.4g}, max {series.max():,.4g}; possible IQR outliers: {outliers}.")
+    date_cols = []
+    for col in frame.columns:
+        if col in numeric_cols:
+            continue
+        parsed = pd.to_datetime(frame[col], errors="coerce")
+        if parsed.notna().sum() >= max(2, int(len(frame) * .6)):
+            date_cols.append(col)
+    if date_cols and numeric_cols:
+        date_col, metric = date_cols[0], numeric_cols[0]
+        notes.append(f"Trend candidate: compare {metric} across {date_col} to identify time-based changes.")
+        trend = pd.DataFrame({
+            "_date": pd.to_datetime(frame[date_col], errors="coerce"),
+            "_metric": pd.to_numeric(frame[metric], errors="coerce"),
+        }).dropna().sort_values("_date")
+        if len(trend) >= 3:
+            changes = trend["_metric"].pct_change().replace([float("inf"), float("-inf")], pd.NA).dropna()
+            if not changes.empty:
+                largest = changes.abs().idxmax()
+                pct = float(changes.loc[largest]) * 100
+                notes.append(f"Largest consecutive change in {metric}: {pct:+.1f}% (check this period for an unexpected shift).")
+    elif numeric_cols:
+        notes.append(f"Chart candidate: compare {numeric_cols[0]} across a category column to spot differences.")
+    return notes[:7]
+
+def summarize_result(frame):
+    if frame is None or frame.empty:
+        return "The query returned no rows."
+    parts = [f"The query returned {len(frame):,} rows and {len(frame.columns):,} columns."]
+    numeric = frame.select_dtypes(include="number")
+    if not numeric.empty:
+        col = numeric.columns[0]
+        parts.append(f"For {col}, the average is {numeric[col].mean():,.4g} and the range is {numeric[col].min():,.4g} to {numeric[col].max():,.4g}.")
+    return " ".join(parts)
 def ask_local_sql(question, frame):
     """Generate DuckDB SQL for a local CSV/Excel DataFrame."""
     if frame is None or frame.empty:
@@ -414,16 +731,34 @@ def execute_local_sql(query, frame):
         result = connection.execute(query).fetchdf()
     return result
 def safe_filename(question):
-    name = re.sub(r"[^a-zA-Z0-9_-]+", "_", question.lower()).strip("_")
-    return (name or "nexadata_result")[:70]
+    """Create an understandable, keyword-based report name with a year-month suffix."""
+    text = re.sub(r"[^a-zA-Z0-9 ]+", " ", str(question or "").lower())
+    text = re.sub(r"\s+", " ", text).strip()
+    aliases = [
+        (("monthly sales", "sales by month", "sales trend"), "monthly_sales_summary"),
+        (("payment", "collection", "transaction"), "payment_transaction_summary"),
+        (("customer", "cif"), "customer_analysis"),
+        (("inventory", "stock", "product"), "product_inventory_analysis"),
+        (("branch", "state", "region"), "regional_performance_summary"),
+        (("revenue", "profit", "income"), "revenue_profit_summary"),
+        (("outlier", "missing", "data quality"), "data_quality_report"),
+    ]
+    chosen = next((name for terms, name in aliases if any(term in text for term in terms)), None)
+    if not chosen:
+        stop = {"show", "give", "me", "the", "a", "an", "what", "is", "are", "of", "for", "by", "with", "and", "in", "to", "find", "list", "please", "can", "you"}
+        words = [w for w in text.split() if w not in stop][:5]
+        chosen = "_".join(words) or "nexadata_insight_report"
+    suffix = datetime.now().strftime("%Y-%m")
+    return f"{chosen[:48].strip('_')}_{suffix}"
 def generate_excel(result):
     buffer = io.BytesIO()
     result_to_df(result).to_excel(
         buffer, index=False, sheet_name="Analysis Result", engine="openpyxl"
     )
     return buffer.getvalue()
-def generate_pdf(question, dataset_name, result):
-    output_df = result_to_df(result)
+def generate_pdf(question, dataset_name, result, summary="", generated_sql=""):
+    """Build a compact insight report with summary, chart, result table and SQL."""
+    output_df = result_to_df(result) if result is not None else pd.DataFrame()
     buffer = io.BytesIO()
     doc = SimpleDocTemplate(
         buffer, pagesize=landscape(A4), rightMargin=24, leftMargin=24,
@@ -431,34 +766,72 @@ def generate_pdf(question, dataset_name, result):
     )
     styles = getSampleStyleSheet()
     story = [
-        Paragraph("NexaData AI Report", styles["Title"]),
-        Spacer(1, 10),
-        Paragraph(f"<b>Dataset:</b> {html.escape(str(dataset_name))}", styles["Normal"]),
-        Spacer(1, 6),
+        Paragraph("NexaData AI Insight Report", styles["Title"]),
+        Spacer(1, 8),
+        Paragraph(f"<b>Dataset:</b> {html.escape(str(dataset_name or 'Not specified'))}", styles["Normal"]),
+        Spacer(1, 5),
         Paragraph(f"<b>Question:</b> {html.escape(str(question))}", styles["Normal"]),
+        Spacer(1, 8),
+        Paragraph("Summary", styles["Heading2"]),
+        Paragraph(html.escape(summary or summarize_result(output_df)), styles["BodyText"]),
         Spacer(1, 10),
     ]
-    pdf_df = output_df.head(500).fillna("").astype(str)
-    table_data = [[str(c)[:40] for c in pdf_df.columns]]
-    table_data.extend([[str(v)[:100] for v in row] for row in pdf_df.itertuples(index=False, name=None)])
-    if pdf_df.empty:
-        table_data = [["No result rows"]]
-    table = LongTable(table_data, repeatRows=1)
-    table.setStyle(TableStyle([
-        ("BACKGROUND", (0, 0), (-1, 0), colors.HexColor("#243b80")),
-        ("TEXTCOLOR", (0, 0), (-1, 0), colors.white),
-        ("GRID", (0, 0), (-1, -1), 0.4, colors.grey),
-        ("FONTSIZE", (0, 0), (-1, -1), 7),
-        ("VALIGN", (0, 0), (-1, -1), "TOP"),
-    ]))
-    story.append(table)
-    if len(output_df) > 500:
-        story.extend([
-            Spacer(1, 8),
-            Paragraph("PDF contains the first 500 result rows. Use CSV or Excel for the full result.", styles["Italic"]),
-        ])
+    if not output_df.empty:
+        try:
+            import matplotlib
+            matplotlib.use("Agg")
+            import matplotlib.pyplot as plt
+            numeric = []
+            plot_df = output_df.copy()
+            for col in plot_df.columns:
+                vals = pd.to_numeric(plot_df[col], errors="coerce")
+                if vals.notna().sum() >= 2:
+                    plot_df[col] = vals
+                    numeric.append(col)
+            if numeric and len(plot_df) >= 2:
+                category = next((c for c in plot_df.columns if c not in numeric), None)
+                metric = numeric[0]
+                fig, ax = plt.subplots(figsize=(9, 3.2))
+                if category:
+                    chart_data = plot_df[[category, metric]].dropna().head(20)
+                    ax.bar(chart_data[category].astype(str), chart_data[metric])
+                    ax.set_xlabel(str(category))
+                    ax.tick_params(axis="x", labelrotation=35, labelsize=7)
+                else:
+                    ax.plot(range(len(plot_df.head(30))), plot_df[metric].head(30), marker="o")
+                    ax.set_xlabel("Row")
+                ax.set_ylabel(str(metric))
+                ax.set_title(f"{metric} overview")
+                fig.tight_layout()
+                image_buffer = io.BytesIO()
+                fig.savefig(image_buffer, format="png", dpi=120, bbox_inches="tight")
+                plt.close(fig)
+                image_buffer.seek(0)
+                story.extend([Paragraph("Chart overview", styles["Heading2"]), RLImage(image_buffer, width=480, height=175), Spacer(1, 8)])
+        except Exception:
+            pass
+        story.append(Paragraph("Result table", styles["Heading2"]))
+        # Include every row in the PDF, not just a preview subset.
+        pdf_df = output_df.fillna("").astype(str)
+        table_data = [[str(c)[:40] for c in pdf_df.columns]]
+        table_data.extend([[str(v)[:100] for v in row] for row in pdf_df.itertuples(index=False, name=None)])
+        if pdf_df.empty:
+            table_data = [["No result rows"]]
+        table = LongTable(table_data, repeatRows=1, splitByRow=1)
+        table.setStyle(TableStyle([
+            ("BACKGROUND", (0, 0), (-1, 0), colors.HexColor("#243b80")),
+            ("TEXTCOLOR", (0, 0), (-1, 0), colors.white),
+            ("GRID", (0, 0), (-1, -1), 0.4, colors.grey),
+            ("ALIGN", (0, 0), (-1, -1), "LEFT"),
+            ("FONTSIZE", (0, 0), (-1, -1), 7),
+            ("VALIGN", (0, 0), (-1, -1), "TOP"),
+        ]))
+        story.append(table)
+    if generated_sql:
+        story.extend([Spacer(1, 12), Paragraph("Generated SQL", styles["Heading2"]), Preformatted(str(generated_sql), styles["Code"])])
     doc.build(story)
     return buffer.getvalue()
+
 def get_smtp_settings():
     """Read Gmail SMTP settings from environment variables or Streamlit secrets."""
     def setting(name, default=""):
@@ -749,6 +1122,8 @@ def add_history(mode, question, answer, dataset_name=None, code="", result=None)
 # ------------------------------ Sidebar ---------------------------
 if "history" not in st.session_state:
     st.session_state.history = []
+if "question_mode_selector" not in st.session_state:
+    st.session_state.question_mode_selector = "General Questions"
 if "current" not in st.session_state:
     st.session_state.current = None
 for key, default in {
@@ -844,11 +1219,43 @@ if st.session_state.get("postgres_config"):
         st.session_state.history_load_error = f"{exc}.{diagnostic}"
 
 with st.sidebar:
-    st.markdown('<div class="dm-brand">🧠 NexaData AI</div>', unsafe_allow_html=True)
+    st.markdown('<div class="dm-brand">📊 NexaData AI</div>', unsafe_allow_html=True)
     st.markdown('<div class="dm-tagline">Ask. Analyze. Discover.</div>', unsafe_allow_html=True)
     st.divider()
+    st.markdown("### Data source")
+    source_mode = st.radio("Choose source", ["PostgreSQL", "Upload File"], key="dataset_source_mode", index=0, label_visibility="collapsed")
+    df = None
+    dataset_name = "No dataset"
+    if source_mode == "Upload File":
+        uploaded_file = st.file_uploader("Upload CSV or Excel", type=["csv", "xlsx", "xls"], key="manual_dataset_upload")
+        if uploaded_file is not None:
+            try:
+                df = read_dataset(uploaded_file.name, uploaded_file.getvalue())
+                dataset_name = uploaded_file.name
+                if df.empty:
+                    st.warning("The selected file is empty.")
+                else:
+                    st.success(f"Ready: {uploaded_file.name}")
+            except Exception as exc:
+                st.error(f"Could not read the uploaded file: {exc}")
+    else:
+        saved_config = get_saved_postgres_config()
+        if saved_config:
+            st.session_state.postgres_config = saved_config
+            try:
+                with psycopg.connect(**saved_config) as conn:
+                    with conn.cursor() as cur:
+                        cur.execute("SELECT current_database(), current_user")
+                        connected_db, connected_user = cur.fetchone()
+                dataset_name = f"PostgreSQL: {connected_db}"
+                st.success(f"Connected: {connected_db}")
+            except Exception as exc:
+                st.session_state.postgres_config = None
+                st.error(f"PostgreSQL connection failed. Verify the Streamlit secrets settings. Details: {exc}")
+        else:
+            st.session_state.postgres_config = None
+            st.warning("Add POSTGRES_HOST, POSTGRES_DB, POSTGRES_USER, POSTGRES_PASSWORD and POSTGRES_PORT in Streamlit Cloud → Settings → Secrets.")
     st.markdown("### Question History")
-    st.caption("History is saved in PostgreSQL when connected.")
     if st.session_state.get("history_load_error"):
         st.warning("Could not reload saved history from PostgreSQL: " + str(st.session_state.history_load_error))
     if st.session_state.get("history_save_error"):
@@ -862,47 +1269,102 @@ with st.sidebar:
         st.session_state.show_download_options = False
         st.session_state.show_email_form = False
         st.rerun()
-    if st.session_state.history:
-        for i, item in enumerate(st.session_state.history):
+    history_search = st.text_input("Search conversations...", key="history_search", placeholder="Search your questions", label_visibility="collapsed")
+    history_mode = st.session_state.get("question_mode_selector", "General Questions")
+    mode_history = [
+        item for item in st.session_state.history
+        if item.get("mode", "General Questions") == history_mode
+    ]
+    visible_history = [
+        item for item in mode_history
+        if history_search.strip().casefold() in str(item.get("question", "")).casefold()
+    ] if history_search.strip() else mode_history
+    if not visible_history:
+        st.caption(f"No { 'general' if history_mode == 'General Questions' else 'data-specific' } questions in history yet.")
+    if visible_history:
+        for i, item in enumerate(visible_history):
             question_text = str(item.get("question", ""))
             label = question_text.strip()
             label = label if len(label) <= 42 else label[:39] + "..."
-            with st.expander(f"{'◉' if item.get('mode') == 'Data-Specific Questions' else '○'} {label}", expanded=False):
-                st.caption(f"Mode: {item.get('mode', 'Question')}" + (f" · {item.get('created_at').strftime('%Y-%m-%d %H:%M')}" if item.get('created_at') and hasattr(item.get('created_at'), 'strftime') else ""))
-                st.markdown("**Question — use the copy icon to copy**")
-                st.code(question_text or "(No question text)", language=None)
-                saved_result = item.get("result")
-                saved_answer = item.get("answer", "")
-                st.markdown("**Saved answer — use the copy icon for text**")
-                if isinstance(saved_result, (pd.DataFrame, pd.Series)):
-                    st.dataframe(result_to_df(saved_result).head(100), width="stretch", hide_index=True)
-                    try:
-                        answer_for_copy = result_to_df(saved_result).to_csv(index=False)
-                    except Exception:
-                        answer_for_copy = str(saved_result)
-                    st.code(answer_for_copy or "(Empty result)", language="text")
-                elif saved_result is not None:
-                    answer_for_copy = str(saved_result)
-                    st.code(answer_for_copy, language="text")
-                else:
-                    answer_for_copy = str(saved_answer or "(No saved answer)")
-                    st.code(answer_for_copy, language="text")
-                if item.get("code"):
-                    st.markdown("**Generated SQL / code — use the copy icon**")
-                    st.code(str(item.get("code")), language="sql")
-                if st.button("Open this conversation", key=f"history_{i}", width="stretch"):
+            history_col, copy_col = st.columns([6, 1], vertical_alignment="center")
+            with history_col:
+                if st.button(f"{'◉' if item.get('mode') == 'Data-Specific Questions' else '○'} {label}", key=f"history_open_{i}", width="stretch", help="Open this conversation"):
+                    opened_mode = item.get("mode", "General Questions")
+                    st.session_state.question_mode_selector = opened_mode
+                    st.session_state.active_question_mode = opened_mode
                     st.session_state.current = {
-                        "mode": item.get("mode", "General Questions"),
+                        "mode": opened_mode,
                         "question": question_text,
-                        "answer": saved_answer,
+                        "answer": item.get("answer", ""),
                         "dataset": item.get("dataset"),
                         "code": item.get("code", ""),
-                        "result": saved_result,
+                        "result": item.get("result"),
                     }
                     st.session_state.show_full_result = False
                     st.session_state.show_download_options = False
                     st.session_state.show_email_form = False
                     st.rerun()
+            with copy_col:
+                # Icon-only copy control. Copies the question, never changes the input.
+                escaped_question = json.dumps(question_text, ensure_ascii=False)
+                copy_html = r"""
+                <button id="copy-question-__INDEX__" title="Copy question" aria-label="Copy question"
+                  style="display:flex;align-items:center;justify-content:center;width:32px;height:32px;padding:0;border:0;border-radius:6px;background:transparent;color:#e2e8f0;cursor:pointer;"
+                  onmouseover="this.style.background='rgba(148,163,184,.18)'" onmouseout="this.style.background='transparent'">
+                  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                    <rect x="8" y="8" width="13" height="13" rx="2"/>
+                    <path d="M16 8V5a2 2 0 0 0-2-2H5a2 2 0 0 0-2 2v9a2 2 0 0 0 2 2h3"/>
+                  </svg>
+                </button>
+                <script>
+                (() => {
+                  const button = document.getElementById('copy-question-__INDEX__');
+                  const question = __QUESTION__;
+                  // The icon lives in an iframe, so explicitly detect the app theme.
+                  try {
+                    const parentDoc = window.parent.document;
+                    const sidebar = parentDoc.querySelector('[data-testid=\"stSidebar\"]');
+                    const target = sidebar || parentDoc.body;
+                    const bg = getComputedStyle(target).backgroundColor;
+                    const nums = bg.match(/[0-9.]+/g);
+                    if (nums && nums.length >= 3) {
+                      const luminance = (Number(nums[0]) * 299 + Number(nums[1]) * 587 + Number(nums[2]) * 114) / 1000;
+                      button.style.color = luminance < 140 ? '#f1f5f9' : '#334155';
+                    } else { button.style.color = '#f1f5f9'; }
+                  } catch (e) { button.style.color = '#f1f5f9'; }
+                  button.addEventListener('click', async () => {
+                    try {
+                      if (navigator.clipboard && window.isSecureContext) {
+                        await navigator.clipboard.writeText(question);
+                      } else {
+                        throw new Error('Clipboard API unavailable');
+                      }
+                      button.title = 'Copied';
+                    } catch (err) {
+                      try {
+                        const area = document.createElement('textarea');
+                        area.value = question;
+                        area.setAttribute('readonly', '');
+                        area.style.position = 'fixed';
+                        area.style.left = '-9999px';
+                        document.body.appendChild(area);
+                        area.select();
+                        const copied = document.execCommand('copy');
+                        area.remove();
+                        if (!copied) throw new Error('Copy failed');
+                        button.title = 'Copied';
+                      } catch (fallbackErr) {
+                        button.title = 'Clipboard blocked by browser';
+                      }
+                    }
+                  });
+                })();
+                </script>
+                """.replace("__INDEX__", str(i)).replace("__QUESTION__", escaped_question)
+                components.html(copy_html, height=34, scrolling=False)
+
+            # Clicking the copy icon copies only the question text to the clipboard.
+            # Clicking the question itself opens that saved conversation above.
     else:
         st.caption("Your questions will appear here.")
     if st.button("Clear History", width="stretch"):
@@ -915,20 +1377,51 @@ with st.sidebar:
         except Exception as exc:
             st.error(f"Could not clear PostgreSQL history: {exc}")
     st.divider()
+    st.selectbox("Appearance", ["Dark", "Light"], key="nexa_theme")
+    st.divider()
     st.caption("NexaData AI · Ask. Analyze. Discover.")
 # ------------------------------ Header ----------------------------
 st.markdown(
-    '<div class="dm-hero"><h2>Ask. Analyze. Discover.</h2>'
-    '<p>Your workspace for general questions and data-specific insights.</p></div>',
+    '<div class="dm-hero"><h2>Welcome to NexaData AI</h2>'
+    '<p>Ask questions about your data, explore results, and get clear answers from PostgreSQL or uploaded files.</p></div>',
     unsafe_allow_html=True,
 )
+# Welcome shortcuts are shown only on a new conversation; unlike live typing suggestions,
+# these are optional starter prompts similar to the reference site.
+if st.session_state.current is None:
+    st.markdown("### Start with a question")
+    starter_cols = st.columns(4)
+    starter_prompts = [
+        ("📈 Sales summary", "Show total sales by city", "data_question_input"),
+        ("🏢 Branch analysis", "Show total customers by branch", "data_question_input"),
+        ("🧹 Data quality", "Find missing values and duplicate rows", "data_question_input"),
+        ("🐍 General help", "Explain incremental loading in ETL", "general_question_input"),
+    ]
+    for idx, (label, prompt, target_key) in enumerate(starter_prompts):
+        with starter_cols[idx]:
+            if st.button(label, key=f"welcome_prompt_{idx}", width="stretch"):
+                st.session_state[target_key] = prompt
+                st.session_state.pending_question_mode = "General Questions" if target_key == "general_question_input" else "Data-Specific Questions"
+                st.rerun()
 # ------------------------------ Data loading ----------------------
 # Both experiences use matching top-level tabs. Data-specific questions support
 # uploaded CSV/Excel files (DuckDB SQL) or PostgreSQL (PostgreSQL SQL).
-general_tab, data_tab = st.tabs(["💬 General Questions", "📊 Data-Specific Questions"])
-df = None
-dataset_name = "No dataset"
-source_mode = None
+# Use a stateful selector instead of st.tabs: Streamlit tabs reset to the first tab
+# on reruns, which made data-query results appear under General Questions.
+if "pending_question_mode" in st.session_state:
+    st.session_state["question_mode_selector"] = st.session_state.pop("pending_question_mode")
+selected_question_mode = st.radio(
+    "Question type",
+    ["General Questions", "Data-Specific Questions"],
+    key="question_mode_selector",
+    horizontal=True,
+    format_func=lambda value: "💬 General Questions" if value == "General Questions" else "📊 Data-Specific Questions",
+    label_visibility="collapsed",
+)
+general_tab = st.container()
+data_tab = st.container()
+# Keep the dataset and source selected in the sidebar; do not reset them here.
+source_mode = st.session_state.get("dataset_source_mode", "PostgreSQL")
 mode = None
 question = ""
 ask_clicked = False
@@ -937,105 +1430,52 @@ if "postgres_config" not in st.session_state:
 if "postgres_tables" not in st.session_state:
     st.session_state.postgres_tables = []
 
-with general_tab:
-    st.caption("Ask about concepts, coding, SQL, Python, data engineering, or other general topics.")
-    with st.form("general_ask_form", clear_on_submit=False):
-        general_question = st.text_input(
-            "Your question",
-            placeholder="Example: Explain incremental loading in ETL.",
-            key="general_question_input",
-        )
-        general_ask_clicked = st.form_submit_button(
-            "✨ Ask NexaData AI", type="primary", width="stretch"
-        )
-    if general_ask_clicked:
-        question = general_question
-        data_intent_terms = (
-            "show ", "list ", "total ", "count ", "sum ", "average ", "avg ",
-            "sales", "revenue", "payment", "invoice", "expense", "budget",
-            "refund", "customer", "branch", "product", "inventory", "stock",
-            "shipment", "delivery", "order", "database", "table", "schema",
-            "by month", "monthly", "by state", "top ", "highest", "lowest",
-        )
-        normalized_question = (general_question or "").strip().lower()
-        looks_like_data_question = any(term in normalized_question for term in data_intent_terms)
-        if (
-            looks_like_data_question
-            and st.session_state.get("dataset_source_mode") == "PostgreSQL"
-            and st.session_state.postgres_config
-        ):
-            mode = "Data-Specific Questions"
-        else:
+if selected_question_mode == "General Questions":
+    with general_tab:
+        st.caption("Ask about concepts, coding, SQL, Python, data engineering, or other general topics.")
+        with st.form("general_question_form", clear_on_submit=False):
+            st.markdown('<div class="nexa-send-row">', unsafe_allow_html=True)
+            general_input_col, general_send_col = st.columns([12, 1], vertical_alignment="center", gap="small")
+            with general_input_col:
+                general_question = st.text_input(
+                    "Message NexaData AI",
+                    placeholder="Ask anything… e.g. Explain incremental loading in ETL",
+                    key="general_question_input",
+                    label_visibility="collapsed",
+                )
+            with general_send_col:
+                general_ask_clicked = st.form_submit_button("↑", type="primary", help="Send question")
+            st.markdown('</div>', unsafe_allow_html=True)
+        if general_ask_clicked:
+            # Each form handles its own submit event. Do not infer the mode from
+            # stale session state: this form is always for general questions.
+            question = str(general_question or "")
             mode = "General Questions"
-        ask_clicked = True
+            st.session_state.active_question_mode = mode
+            ask_clicked = True
 
-with data_tab:
-    st.caption("Ask questions about an uploaded file or your connected PostgreSQL database.")
-    source_mode = st.radio(
-        "Data source",
-        ["Upload File", "PostgreSQL"],
-        horizontal=True,
-        key="dataset_source_mode",
-    )
-    df = None
-    dataset_name = "No dataset"
-
-    if source_mode == "Upload File":
-        uploaded_file = st.file_uploader(
-            "Upload a CSV or Excel file", type=["csv", "xlsx", "xls"],
-            key="manual_dataset_upload",
-        )
-        if uploaded_file is not None:
-            try:
-                df = read_dataset(uploaded_file.name, uploaded_file.getvalue())
-                dataset_name = uploaded_file.name
-                if df.empty:
-                    st.warning("The selected file is empty.")
-                else:
-                    st.success(f"File ready: {uploaded_file.name}")
-            except Exception as exc:
-                st.error(f"Could not read the uploaded file: {exc}")
-    else:
-        # PostgreSQL connection details are loaded from .streamlit/secrets.toml
-        # or environment variables. No database password is shown in the UI.
-        saved_config = get_saved_postgres_config()
-        if saved_config:
-            st.session_state.postgres_config = saved_config
-            try:
-                with psycopg.connect(**saved_config) as conn:
-                    with conn.cursor() as cur:
-                        cur.execute("SELECT current_database(), current_user")
-                        connected_db, connected_user = cur.fetchone()
-                dataset_name = f"PostgreSQL: {connected_db}"
-                st.success(f"Connected to PostgreSQL database `{connected_db}` as `{connected_user}`.")
-            except Exception as exc:
-                st.session_state.postgres_config = None
-                st.error(f"PostgreSQL connection failed. Check your private secrets/environment settings. Details: {exc}")
-        else:
-            st.session_state.postgres_config = None
-            st.error(
-                "PostgreSQL credentials are not configured. Add POSTGRES_HOST, POSTGRES_DB, "
-                "POSTGRES_USER, POSTGRES_PASSWORD, and POSTGRES_PORT to "
-                r"C:\AI_DATA_SOLUTION\.streamlit\secrets.toml, then restart the app."
-            )
-
-    # Query area stays at the bottom of the Data-Specific Questions tab,
-    # matching the simple question-and-submit pattern in General Questions.
-    st.divider()
-    st.markdown("### Ask a data-specific question")
-    with st.form("data_ask_form", clear_on_submit=False):
-        data_question = st.text_input(
-            "Your question",
-            placeholder="Example: Which 10 customers made the highest total payments?",
-            key="data_question_input",
-        )
-        data_ask_clicked = st.form_submit_button(
-            "✨ Ask NexaData AI", type="primary", width="stretch"
-        )
-    if data_ask_clicked:
-        mode = "Data-Specific Questions"
-        question = data_question
-        ask_clicked = True
+else:
+    with data_tab:
+        st.markdown("### Ask question")
+        with st.form("data_question_form", clear_on_submit=False):
+            st.markdown('<div class="nexa-send-row">', unsafe_allow_html=True)
+            data_input_col, data_send_col = st.columns([12, 1], vertical_alignment="center", gap="small")
+            with data_input_col:
+                data_question = st.text_input(
+                    "Message about your data",
+                    placeholder="e.g. Show total sales by month",
+                    key="data_question_input",
+                    label_visibility="collapsed",
+                )
+            with data_send_col:
+                data_ask_clicked = st.form_submit_button("↑", type="primary", help="Send question")
+            st.markdown('</div>', unsafe_allow_html=True)
+        if data_ask_clicked:
+            # Enter or the arrow submits this form, so process it strictly as a data query.
+            mode = "Data-Specific Questions"
+            question = str(data_question or "")
+            st.session_state.active_question_mode = mode
+            ask_clicked = True
 if ask_clicked:
     if not question.strip():
         st.warning("Please enter a question.")
@@ -1043,7 +1483,7 @@ if ask_clicked:
         try:
             with st.spinner("Generating and executing your query..."):
                 if mode == "General Questions":
-                    answer = ask_general(question.strip())
+                    answer = st.write_stream(stream_general_answer(question.strip()))
                     current = {
                         "mode": mode, "question": question.strip(),
                         "answer": answer, "dataset": None, "code": "", "result": None,
@@ -1084,6 +1524,9 @@ if ask_clicked:
                         "code": generated_code, "result": result,
                     }
                 st.session_state.current = current
+                # Select the matching question mode before rerunning so the answer and history
+                # stay associated with the mode that submitted the question.
+                st.session_state.pending_question_mode = mode
                 st.session_state.show_full_result = False
                 st.session_state.show_download_options = False
                 st.session_state.show_email_form = False
@@ -1110,6 +1553,10 @@ if ask_clicked:
             st.error(f"Could not process the question: {exc}")
 # ------------------------------ Result ----------------------------
 current = st.session_state.current
+# Keep the last answer attached to its own question mode. Switching modes hides
+# the other mode's answer without deleting it; switching back restores it.
+if current is not None and current.get("mode", "General Questions") != selected_question_mode:
+    current = None
 if current is not None:
     result_tab = data_tab if current.get("mode") == "Data-Specific Questions" else general_tab
     with result_tab:
@@ -1132,86 +1579,99 @@ if current is not None:
             height=0,
         )
         st.markdown("### Your question")
-        st.write(current["question"])
+        st.code(str(current["question"]), language=None)
         st.markdown("### NexaData AI answer")
         is_data_result = current["mode"] == "Data-Specific Questions"
         result = current.get("result")
         display_result = result_to_df(result) if is_data_result and result is not None else None
         if is_data_result:
             if isinstance(result, (pd.DataFrame, pd.Series)):
-                st.dataframe(display_result.head(500), width="stretch", hide_index=True)
+                st.dataframe(left_aligned_frame(display_result.head(500).astype(str)), width="stretch", hide_index=True)
                 if len(display_result) > 500:
                     st.caption("Showing the first 500 rows here. Use View or Download for the complete result.")
                 # Keep the visualization independent of the table's column menu.
                 # Chart controls are based on the saved result, so changing a table
                 # column or choosing a chart option will not discard the chart.
-                st.markdown("### 📊 Visualization")
+                st.markdown("### 📊 Smart visualization builder")
                 chart_df = display_result.copy()
-
-                # SQL drivers sometimes return numeric values as object/string dtype.
-                # Detect columns that are genuinely numeric after safe conversion.
                 numeric_cols = []
                 for column in chart_df.columns:
                     converted = pd.to_numeric(chart_df[column], errors="coerce")
-                    if converted.notna().sum() > 0:
+                    if converted.notna().sum() >= 2:
                         chart_df[column] = converted
                         numeric_cols.append(column)
-
-                category_cols = [c for c in chart_df.columns if c not in numeric_cols]
-
                 if len(chart_df) >= 2 and numeric_cols:
-                    chart_col1, chart_col2, chart_col3 = st.columns([1, 1, 1])
-                    with chart_col1:
-                        chart_type = st.selectbox(
-                            "Chart type",
-                            ["Bar chart", "Line chart", "Area chart"],
-                            key="nexa_chart_type",
-                        )
-                    with chart_col2:
-                        x_options = category_cols if category_cols else ["Row number"]
-                        x_col = st.selectbox(
-                            "Category / X-axis",
-                            x_options,
-                            key="nexa_chart_x",
-                        )
-                    with chart_col3:
-                        y_col = st.selectbox(
-                            "Value / Y-axis",
-                            numeric_cols,
-                            key="nexa_chart_y",
-                        )
-
-                    if x_col == "Row number":
-                        plot_df = pd.DataFrame({
-                            "Row number": range(1, len(chart_df) + 1),
-                            y_col: chart_df[y_col].values,
-                        })
-                    else:
-                        plot_df = chart_df[[x_col, y_col]].copy()
-                        plot_df[x_col] = plot_df[x_col].astype(str)
-                        plot_df = plot_df.dropna(subset=[y_col]).head(100)
-
-                    if not plot_df.empty:
-                        # Use explicit x/y arguments; do not set the category as
-                        # the dataframe index. This keeps the chart easier to restore.
-                        if chart_type == "Bar chart":
-                            st.bar_chart(plot_df, x=x_col, y=y_col, width="stretch")
-                        elif chart_type == "Line chart":
-                            st.line_chart(plot_df, x=x_col, y=y_col, width="stretch")
+                    categorical_cols = [c for c in chart_df.columns if c not in numeric_cols]
+                    x_options = list(chart_df.columns) + (["Row number"] if not categorical_cols else [])
+                    default_x = next((c for c in categorical_cols if any(t in str(c).lower() for t in ("date", "month", "year", "time"))), categorical_cols[0] if categorical_cols else numeric_cols[0])
+                    c1, c2 = st.columns([1, 2])
+                    with c1:
+                        chart_type = st.selectbox("Chart type", ["Recommended", "Bar", "Line", "Area", "Scatter", "Pie", "Histogram"], key="nexa_chart_type")
+                        aggregation = st.selectbox("Aggregation", ["None", "Sum", "Average", "Minimum", "Maximum", "Count"], key="nexa_chart_aggregation")
+                    with c2:
+                        x_col = st.selectbox("X-axis / dimension", x_options, index=x_options.index(default_x) if default_x in x_options else 0, key="nexa_chart_x")
+                        measure_options = [col for col in numeric_cols if col != x_col] or numeric_cols
+                        y_cols = st.multiselect("Y-axis / measures (select multiple)", measure_options, default=measure_options[:min(2, len(measure_options))], key="nexa_chart_y_multi")
+                    y_cols = [col for col in y_cols if col != x_col] or ([numeric_cols[0]] if x_col not in numeric_cols else [])
+                    if chart_type == "Recommended":
+                        if any(t in str(x_col).lower() for t in ("date", "month", "year", "time")):
+                            chart_type = "Line"
+                            recommendation = "Line chart recommended for a time-based trend."
+                        elif len(categorical_cols):
+                            chart_type = "Bar"
+                            recommendation = "Bar chart recommended for category comparisons."
                         else:
-                            st.area_chart(plot_df, x=x_col, y=y_col, width="stretch")
-                        st.caption(
-                            f"{chart_type}: {y_col} by {x_col}. "
-                            "Use the Chart type selector to switch back to Bar chart."
-                        )
+                            chart_type = "Scatter"
+                            recommendation = "Scatter plot recommended for numeric relationships."
                     else:
-                        st.info("There are no numeric values available to plot.")
+                        recommendation = f"{chart_type} chart selected. Change dimensions, measures, or grouping to explore another view."
+                    st.caption("💡 " + recommendation)
+                    if not y_cols:
+                        st.info("Select at least one numeric measure to build a chart.")
+                    elif chart_type == "Histogram":
+                        fig = px.histogram(chart_df, x=y_cols[0], title=f"Distribution of {y_cols[0]}")
+                        st.plotly_chart(fig, use_container_width=True)
+                    elif chart_type == "Scatter":
+                        scatter_x = x_col if x_col in numeric_cols else (numeric_cols[1] if len(numeric_cols) > 1 else numeric_cols[0])
+                        scatter_y = next((col for col in y_cols if col != scatter_x), y_cols[0])
+                        if scatter_x == scatter_y and len(numeric_cols) > 1:
+                            scatter_y = numeric_cols[1] if numeric_cols[0] == scatter_x else numeric_cols[0]
+                        fig = px.scatter(chart_df, x=scatter_x, y=scatter_y, title=f"{scatter_y} vs {scatter_x}")
+                        st.plotly_chart(fig, use_container_width=True)
+                    elif chart_type == "Pie":
+                        pie_names = x_col if x_col not in numeric_cols else next((c for c in categorical_cols), None)
+                        if pie_names:
+                            pie_df = chart_df[[pie_names, y_cols[0]]].copy()
+                            if aggregation != "None":
+                                agg_map = {"Sum":"sum", "Average":"mean", "Minimum":"min", "Maximum":"max", "Count":"count"}
+                                pie_df = pie_df.groupby(pie_names, dropna=False, as_index=False)[y_cols[0]].agg(agg_map.get(aggregation, "sum"))
+                            fig = px.pie(pie_df.head(30), names=pie_names, values=y_cols[0], title=f"{y_cols[0]} by {pie_names}")
+                            st.plotly_chart(fig, use_container_width=True)
+                        else:
+                            st.info("Pie charts need a categorical dimension and one numeric measure.")
+                    else:
+                        plot_df = chart_df.copy()
+                        if x_col == "Row number":
+                            plot_df["Row number"] = range(1, len(plot_df) + 1)
+                        if aggregation != "None" and x_col != "Row number":
+                            agg_map = {"Sum":"sum", "Average":"mean", "Minimum":"min", "Maximum":"max", "Count":"count"}
+                            group_fields = [x_col]
+                            plot_df = plot_df.groupby(group_fields, dropna=False, as_index=False)[y_cols].agg(agg_map.get(aggregation, "sum"))
+                        keep = [x_col] + y_cols
+                        plot_df = plot_df[keep].dropna(subset=[x_col]).head(1000)
+                        title = f"{', '.join(y_cols)} by {x_col}"
+                        color = None
+                        if chart_type == "Bar":
+                            fig = px.bar(plot_df, x=x_col, y=y_cols, color=color, barmode="group", title=title)
+                        elif chart_type == "Line":
+                            fig = px.line(plot_df, x=x_col, y=y_cols, color=color, markers=True, title=title)
+                        else:
+                            fig = px.area(plot_df, x=x_col, y=y_cols, color=color, title=title)
+                        fig.update_layout(legend_title_text="Measure / group", margin=dict(l=12, r=12, t=50, b=12))
+                        st.plotly_chart(fig, use_container_width=True)
+                    st.caption("Tip: choose a dimension and one or more measures to compare metrics in a visualization.")
                 else:
-                    st.info(
-                        "This result does not contain enough numeric data for a chart. "
-                        "Try a query that returns a category and a numeric value, "
-                        "such as total sales by branch."
-                    )
+                    st.info("This result needs at least two rows and one numeric column to build a chart.")
 
             else:
                 st.success(str(result))
@@ -1230,40 +1690,52 @@ if current is not None:
                 st.session_state.show_email_form = False
                 st.session_state.show_download_options = False
         with action_cols[2]:
-            if st.button("⬇️ Download", key="action_download", width="stretch"):
-                st.session_state.show_download_options = not st.session_state.show_download_options
-                st.session_state.show_email_form = False
-                st.session_state.show_full_result = False
+            # The Download control itself opens the format dropdown.
+            download_menu = st.popover("⬇️ Download ▾", width="stretch")
         if st.session_state.show_full_result:
             st.markdown("### Full result")
             if is_data_result:
-                st.dataframe(display_result, width="stretch", height=450, hide_index=True)
+                st.dataframe(left_aligned_frame(display_result.astype(str)), width="stretch", height=450, hide_index=True)
             else:
                 st.markdown(current["answer"])
         file_title = safe_filename(current["question"])
-        if st.session_state.show_download_options:
-            st.markdown("### Download report")
+        with download_menu:
+            st.caption("Choose download format")
             if is_data_result:
-                csv_data = display_result.to_csv(index=False).encode("utf-8-sig")
-                excel_data = generate_excel(result)
-                pdf_data = generate_pdf(current["question"], current.get("dataset"), result)
-                dl1, dl2, dl3 = st.columns(3)
-                with dl1:
-                    st.download_button("Download CSV", csv_data, f"{file_title}.csv", "text/csv", width="stretch")
-                with dl2:
-                    st.download_button(
-                        "Download Excel", excel_data, f"{file_title}.xlsx",
-                        "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-                        width="stretch",
+                download_format = st.selectbox(
+                    "Format", ["CSV", "Excel", "PDF"],
+                    key="download_format_choice", label_visibility="collapsed",
+                )
+                if download_format == "CSV":
+                    download_data = display_result.to_csv(index=False).encode("utf-8-sig")
+                    download_name = f"{file_title}.csv"
+                    download_mime = "text/csv"
+                elif download_format == "Excel":
+                    download_data = generate_excel(display_result)
+                    download_name = f"{file_title}.xlsx"
+                    download_mime = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+                else:
+                    insight_summary = summarize_result(display_result)
+                    download_data = generate_pdf(
+                        current["question"], current.get("dataset"), display_result,
+                        insight_summary, current.get("code", "")
                     )
-                with dl3:
-                    st.download_button("Download PDF", pdf_data, f"{file_title}.pdf", "application/pdf", width="stretch")
-            else:
-                text_data = current["answer"].encode("utf-8")
+                    download_name = f"{file_title}.pdf"
+                    download_mime = "application/pdf"
+                # Use a format-specific widget key so Streamlit never reuses a
+                # previous format's download payload after the selector changes.
                 st.download_button(
-                    "Download TXT", text_data, f"{file_title}.txt", "text/plain",
+                    f"Download {download_format}",
+                    data=download_data,
+                    file_name=download_name,
+                    mime=download_mime,
+                    key=f"download_selected_format_{download_format.lower()}",
                     width="stretch",
                 )
+            else:
+                st.selectbox("Format", ["TXT"], key="download_text_format", label_visibility="collapsed")
+                text_data = current["answer"].encode("utf-8")
+                st.download_button("Download TXT", text_data, f"{file_title}.txt", "text/plain", key="download_txt_compact", width="stretch")
         if st.session_state.show_email_form:
             st.markdown("### Email answer")
             recipient = st.text_input("Recipient email address", placeholder="recipient@example.com", key="recipient_email")
@@ -1275,7 +1747,7 @@ if current is not None:
                         if is_data_result:
                             csv_data = display_result.to_csv(index=False).encode("utf-8-sig")
                             excel_data = generate_excel(result)
-                            pdf_data = generate_pdf(current["question"], current.get("dataset"), result)
+                            pdf_data = generate_pdf(current["question"], current.get("dataset"), result, summarize_result(display_result), current.get("code", ""))
                             send_report_email(
                                 recipient.strip(), current["question"], current.get("dataset"),
                                 file_title, csv_data, excel_data, pdf_data,
@@ -1299,6 +1771,16 @@ if current is not None:
         # full-result view, downloads, and email actions.
         if is_data_result and current.get("code"):
             st.divider()
-            with st.expander("Generated SQL query", expanded=False):
+            with st.expander("SQL preview & explanation", expanded=False):
                 st.code(current["code"], language="sql")
+                explanation_key = "sql_explanation_" + str(abs(hash(current["code"])))
+                if st.button("Explain this SQL", key="explain_sql_button"):
+                    try:
+                        with st.spinner("Explaining the query…"):
+                            st.session_state[explanation_key] = explain_sql_in_plain_english(current["code"])
+                    except Exception as exc:
+                        st.error(f"Could not explain the SQL: {exc}")
+                if st.session_state.get(explanation_key):
+                    st.markdown("**Plain-English explanation**")
+                    st.write(st.session_state[explanation_key])
     st.caption("NexaData AI · Ask. Analyze. Discover.")
