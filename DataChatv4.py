@@ -758,33 +758,10 @@ def generate_pdf(question, dataset_name, result, summary="", generated_sql="", v
         Paragraph(html.escape(summary or summarize_result(output_df)), styles["BodyText"]),
         Spacer(1, 10),
     ]
-    # Embed the exact Plotly figure rendered in the dashboard. This preserves the
-    # selected chart type, axes, aggregation, labels, colors, and current data.
-    if chart_figure is not None:
-        try:
-            chart_bytes = chart_figure.to_image(
-                format="png", width=1400, height=800, scale=1
-            )
-            chart_buffer = io.BytesIO(chart_bytes)
-            story.extend([
-                Paragraph("Chart overview — current visualization", styles["Heading2"]),
-                RLImage(chart_buffer, width=700, height=400, kind="proportional"),
-                Spacer(1, 10),
-            ])
-        except Exception as exc:
-            # Do not silently substitute a different chart; make a missing
-            # Plotly image-export dependency/configuration issue visible.
-            story.extend([
-                Paragraph("Chart overview", styles["Heading2"]),
-                Paragraph(
-                    "The selected chart could not be embedded. Install the "
-                    "Plotly image-export dependency (kaleido) and redeploy.",
-                    styles["BodyText"],
-                ),
-                Spacer(1, 8),
-            ])
-
     if not output_df.empty:
+        chart_added = False
+        # Prefer the exact Plotly figure currently shown in the app, so the PDF
+        # Chart overview always matches the selected visualization type/options.
         story.append(Paragraph("Result table", styles["Heading2"]))
         # Include every row in the PDF, not just a preview subset.
         pdf_df = output_df.fillna("").astype(str)

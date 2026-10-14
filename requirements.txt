@@ -17,4 +17,3 @@ reportlab
 Pillow
 requests
 xlrd
-kaleido
