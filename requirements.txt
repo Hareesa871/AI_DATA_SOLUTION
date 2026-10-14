@@ -17,4 +17,5 @@ reportlab
 Pillow
 requests
 xlrd
-kaleido
+plotly>=6.1.1
+kaleido>=1.0.0
