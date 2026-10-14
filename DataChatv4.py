@@ -4,6 +4,7 @@
 # General Questions + Data Questions + Email / View / Download
 # ============================================================
 import ast
+import copy
 import html
 import io
 import json
@@ -25,6 +26,7 @@ from reportlab.lib import colors
 from reportlab.lib.pagesizes import A4, landscape
 from reportlab.lib.styles import getSampleStyleSheet
 from reportlab.platypus import (
+    KeepTogether,
     LongTable,
     Paragraph,
     SimpleDocTemplate,
@@ -790,34 +792,66 @@ def generate_pdf(
         Spacer(1, 12),
     ]
 
-    # Embed the exact Plotly figure currently displayed in NexaData AI.
-    # Do not silently substitute a separately generated/default chart.
+    # Embed the exact current Plotly chart. A PDF-only copy receives a color
+    # palette if its traces are using default/black colors; chart type, data,
+    # axes, labels, aggregation and the on-screen figure are not changed.
     if chart_figure is not None:
         try:
-            chart_bytes = chart_figure.to_image(
+            pdf_figure = copy.deepcopy(chart_figure)
+            palette = [
+                "#2563EB", "#F97316", "#10B981", "#8B5CF6",
+                "#EC4899", "#06B6D4", "#EAB308", "#EF4444",
+            ]
+            # Use a clean white PDF canvas and a readable color palette.
+            pdf_figure.update_layout(
+                template="plotly_white",
+                paper_bgcolor="#FFFFFF",
+                plot_bgcolor="#FFFFFF",
+                font=dict(color="#253047"),
+                title_font=dict(color="#172554"),
+                legend=dict(font=dict(color="#253047")),
+                margin=dict(l=55, r=35, t=65, b=55),
+            )
+            for index, trace in enumerate(pdf_figure.data):
+                color = palette[index % len(palette)]
+                trace_type = getattr(trace, "type", "")
+                if trace_type == "pie":
+                    trace.marker.colors = palette
+                elif trace_type == "bar":
+                    trace.marker.color = color
+                    if hasattr(trace.marker, "line"):
+                        trace.marker.line.color = color
+                elif trace_type in ("scatter", "scattergl"):
+                    mode = getattr(trace, "mode", "") or ""
+                    if "lines" in mode:
+                        trace.line.color = color
+                    if "markers" in mode:
+                        trace.marker.color = color
+                elif trace_type in ("histogram", "funnel", "waterfall", "box", "violin"):
+                    trace.marker.color = color
+
+            chart_bytes = pdf_figure.to_image(
                 format="png",
                 width=1400,
-                height=800,
+                height=700,
                 scale=2,
             )
             chart_buffer = io.BytesIO(chart_bytes)
             chart_buffer.seek(0)
-            story.extend([
+            chart_image = RLImage(chart_buffer, width=650, height=325, kind="proportional")
+            # Keep the heading and chart together so the heading isn't left
+            # alone at the bottom of one page while the chart starts on the next.
+            story.append(KeepTogether([
                 Paragraph("Current Visualization", styles["Heading2"]),
-                Spacer(1, 8),
-                RLImage(
-                    chart_buffer,
-                    width=700,
-                    height=400,
-                    kind="proportional",
-                ),
-                Spacer(1, 12),
-            ])
+                Spacer(1, 4),
+                chart_image,
+            ]))
+            story.append(Spacer(1, 6))
         except Exception as exc:
             raise RuntimeError(
                 "The current Plotly chart could not be embedded in the PDF. "
-                "Check that Kaleido and its required dependencies are installed "
-                "and compatible. Details: " + str(exc)
+                "Check that Kaleido and Chrome/Chromium are installed and compatible. "
+                "Details: " + str(exc)
             ) from exc
 
     # Include the data used by the chart.
