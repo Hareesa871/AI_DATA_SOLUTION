@@ -738,66 +738,103 @@ def generate_excel(result, visualization_data=None):
         visualization_df.to_excel(writer, index=False, sheet_name="Visualization Data")
     buffer.seek(0)
     return buffer.getvalue()
-def generate_pdf(question, dataset_name, result, summary="", generated_sql="", visualization_data=None, chart_figure=None):
-    """Build a compact insight report with summary, chart, result table and SQL."""
-    output_df = result_to_df(result) if result is not None else pd.DataFrame()
+def generate_pdf(
+    question,
+    dataset_name,
+    result,
+    summary="",
+    generated_sql="",
+    visualization_data=None,
+    chart_figure=None,
+):
+    """Generate a PDF using the exact current Plotly chart and matching data."""
+    output_df = (
+        result_to_df(result)
+        if result is not None
+        else pd.DataFrame()
+    )
+    visualization_df = (
+        result_to_df(visualization_data)
+        if visualization_data is not None
+        else pd.DataFrame()
+    )
+
     buffer = io.BytesIO()
     doc = SimpleDocTemplate(
-        buffer, pagesize=landscape(A4), rightMargin=24, leftMargin=24,
-        topMargin=24, bottomMargin=24,
+        buffer,
+        pagesize=landscape(A4),
+        rightMargin=24,
+        leftMargin=24,
+        topMargin=24,
+        bottomMargin=24,
     )
     styles = getSampleStyleSheet()
     story = [
         Paragraph("NexaData AI Insight Report", styles["Title"]),
         Spacer(1, 8),
-        Paragraph(f"<b>Dataset:</b> {html.escape(str(dataset_name or 'Not specified'))}", styles["Normal"]),
+        Paragraph(
+            f"<b>Dataset:</b> {html.escape(str(dataset_name or 'Not specified'))}",
+            styles["Normal"],
+        ),
         Spacer(1, 5),
-        Paragraph(f"<b>Question:</b> {html.escape(str(question))}", styles["Normal"]),
+        Paragraph(
+            f"<b>Question:</b> {html.escape(str(question or ''))}",
+            styles["Normal"],
+        ),
         Spacer(1, 8),
         Paragraph("Summary", styles["Heading2"]),
-        Paragraph(html.escape(summary or summarize_result(output_df)), styles["BodyText"]),
-        Spacer(1, 10),
+        Paragraph(
+            html.escape(summary or summarize_result(output_df)),
+            styles["BodyText"],
+        ),
+        Spacer(1, 12),
     ]
-    if not output_df.empty:
+
+    # Embed the exact Plotly figure currently displayed in NexaData AI.
+    # Do not silently substitute a separately generated/default chart.
+    if chart_figure is not None:
         try:
-            import matplotlib
-            matplotlib.use("Agg")
-            import matplotlib.pyplot as plt
-            numeric = []
-            plot_df = result_to_df(visualization_data).copy() if visualization_data is not None else output_df.copy()
-            for col in plot_df.columns:
-                vals = pd.to_numeric(plot_df[col], errors="coerce")
-                if vals.notna().sum() >= 2:
-                    plot_df[col] = vals
-                    numeric.append(col)
-            if numeric and len(plot_df) >= 2:
-                category = next((c for c in plot_df.columns if c not in numeric), None)
-                metric = numeric[0]
-                fig, ax = plt.subplots(figsize=(9, 3.2))
-                if category:
-                    chart_data = plot_df[[category, metric]].dropna().head(20)
-                    ax.bar(chart_data[category].astype(str), chart_data[metric])
-                    ax.set_xlabel(str(category))
-                    ax.tick_params(axis="x", labelrotation=35, labelsize=7)
-                else:
-                    ax.plot(range(len(plot_df.head(30))), plot_df[metric].head(30), marker="o")
-                    ax.set_xlabel("Row")
-                ax.set_ylabel(str(metric))
-                ax.set_title(f"{metric} overview")
-                fig.tight_layout()
-                image_buffer = io.BytesIO()
-                fig.savefig(image_buffer, format="png", dpi=120, bbox_inches="tight")
-                plt.close(fig)
-                image_buffer.seek(0)
-                story.extend([Paragraph("Chart overview", styles["Heading2"]), RLImage(image_buffer, width=480, height=175), Spacer(1, 8)])
-        except Exception:
-            pass
-        if visualization_data is not None:
-            visualization_df = result_to_df(visualization_data)
-            story.append(Paragraph("Visualization Data", styles["Heading2"]))
+            chart_bytes = chart_figure.to_image(
+                format="png",
+                width=1400,
+                height=800,
+                scale=2,
+            )
+            chart_buffer = io.BytesIO(chart_bytes)
+            chart_buffer.seek(0)
+            story.extend([
+                Paragraph("Current Visualization", styles["Heading2"]),
+                Spacer(1, 8),
+                RLImage(
+                    chart_buffer,
+                    width=700,
+                    height=400,
+                    kind="proportional",
+                ),
+                Spacer(1, 12),
+            ])
+        except Exception as exc:
+            raise RuntimeError(
+                "The current Plotly chart could not be embedded in the PDF. "
+                "Check that Kaleido and its required dependencies are installed "
+                "and compatible. Details: " + str(exc)
+            ) from exc
+
+    # Include the data used by the chart.
+    if visualization_data is not None:
+        story.extend([
+            Paragraph("Visualization Data", styles["Heading2"]),
+            Spacer(1, 6),
+        ])
+        if visualization_df.empty:
+            story.append(Paragraph("No visualization data available.", styles["BodyText"]))
+        else:
             vis_pdf_df = visualization_df.fillna("").astype(str)
-            vis_data = [[str(c)[:40] for c in vis_pdf_df.columns]]
-            vis_data.extend([[str(v)[:100] for v in row] for row in vis_pdf_df.itertuples(index=False, name=None)])
+            vis_data = [[str(column)[:40] for column in vis_pdf_df.columns]]
+            vis_data.extend(
+                [[str(value)[:100] for value in row]
+                 for row in vis_pdf_df.itertuples(index=False, name=None)]
+            )
             vis_table = LongTable(vis_data, repeatRows=1, splitByRow=1)
             vis_table.setStyle(TableStyle([
                 ("BACKGROUND", (0, 0), (-1, 0), colors.HexColor("#243b80")),
@@ -807,34 +844,43 @@ def generate_pdf(question, dataset_name, result, summary="", generated_sql="", v
                 ("FONTSIZE", (0, 0), (-1, -1), 7),
                 ("VALIGN", (0, 0), (-1, -1), "TOP"),
             ]))
-            story.extend([vis_table, Spacer(1, 8)])
-        if chart_figure is not None:
-            try:
-                chart_bytes = chart_figure.to_image(format="png", width=1100, height=650, scale=1)
-                chart_buffer = io.BytesIO(chart_bytes)
-                story.extend([Paragraph("Current Visualization", styles["Heading2"]), RLImage(chart_buffer, width=500, height=290), Spacer(1, 8)])
-            except Exception:
-                pass
-        story.append(Paragraph("Result table", styles["Heading2"]))
-        # Include every row in the PDF, not just a preview subset.
+            story.extend([vis_table, Spacer(1, 12)])
+
+    # Include the complete query result table.
+    story.extend([
+        Paragraph("Result Table", styles["Heading2"]),
+        Spacer(1, 6),
+    ])
+    if output_df.empty:
+        table_data = [["No result rows"]]
+    else:
         pdf_df = output_df.fillna("").astype(str)
-        table_data = [[str(c)[:40] for c in pdf_df.columns]]
-        table_data.extend([[str(v)[:100] for v in row] for row in pdf_df.itertuples(index=False, name=None)])
-        if pdf_df.empty:
-            table_data = [["No result rows"]]
-        table = LongTable(table_data, repeatRows=1, splitByRow=1)
-        table.setStyle(TableStyle([
-            ("BACKGROUND", (0, 0), (-1, 0), colors.HexColor("#243b80")),
-            ("TEXTCOLOR", (0, 0), (-1, 0), colors.white),
-            ("GRID", (0, 0), (-1, -1), 0.4, colors.grey),
-            ("ALIGN", (0, 0), (-1, -1), "LEFT"),
-            ("FONTSIZE", (0, 0), (-1, -1), 7),
-            ("VALIGN", (0, 0), (-1, -1), "TOP"),
-        ]))
-        story.append(table)
+        table_data = [[str(column)[:40] for column in pdf_df.columns]]
+        table_data.extend(
+            [[str(value)[:100] for value in row]
+             for row in pdf_df.itertuples(index=False, name=None)]
+        )
+
+    result_table = LongTable(table_data, repeatRows=1, splitByRow=1)
+    result_table.setStyle(TableStyle([
+        ("BACKGROUND", (0, 0), (-1, 0), colors.HexColor("#243b80")),
+        ("TEXTCOLOR", (0, 0), (-1, 0), colors.white),
+        ("GRID", (0, 0), (-1, -1), 0.4, colors.grey),
+        ("ALIGN", (0, 0), (-1, -1), "LEFT"),
+        ("FONTSIZE", (0, 0), (-1, -1), 7),
+        ("VALIGN", (0, 0), (-1, -1), "TOP"),
+    ]))
+    story.append(result_table)
+
     if generated_sql:
-        story.extend([Spacer(1, 12), Paragraph("Generated SQL", styles["Heading2"]), Preformatted(str(generated_sql), styles["Code"])])
+        story.extend([
+            Spacer(1, 12),
+            Paragraph("Generated SQL", styles["Heading2"]),
+            Preformatted(str(generated_sql), styles["Code"]),
+        ])
+
     doc.build(story)
+    buffer.seek(0)
     return buffer.getvalue()
 
 def get_smtp_settings():
