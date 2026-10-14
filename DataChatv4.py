@@ -890,6 +890,7 @@ def get_saved_postgres_config():
         port = int(port)
     except (TypeError, ValueError):
         port = 5432
+    
     return {
         "host": host,
         "port": port,
@@ -897,7 +898,9 @@ def get_saved_postgres_config():
         "user": user,
         "password": password,
         "connect_timeout": 5,
+        "sslmode": "require",
     }
+
 
 
 def ensure_history_table(config):
